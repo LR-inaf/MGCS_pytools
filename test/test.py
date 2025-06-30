@@ -6,10 +6,10 @@ import statistical_membership.membership as stat_mem
 
 
 def main():
-    CATALOG_PATH = os.path.abspath("/home/linux-machine/work/NGC6749/catalogs")
-    OUTPUT_PATH = os.path.abspath(
-        "/home/linux-machine/work/NGC6749/pyMGCS_tools/output"
-    )
+    CATALOG_PATH = os.path.join(
+        os.getcwd(), "NGC6749.CAT.v1"
+    )  # Replace with the actual path to your catalog
+    OUTPUT_PATH = os.getcwd()  # Replace with the actual path to your output directory
 
     # v1cat = "/home/linux-machine/NGC6749/NGC6749.CAT.v1"
 
