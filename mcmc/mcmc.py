@@ -4,6 +4,8 @@ from numpy.typing import NDArray
 import emcee
 from multiprocessing import Pool
 
+from .set_posterior import posterior
+
 
 class MyEmceeES:
     """Class to run MCMC with emcee.
@@ -41,19 +43,19 @@ class MyEmceeES:
     def __init__(
         self,
         data: NDArray,
-        posterior: callable,
         nwalkers: int,
         nsteps: int,
         ncomp: int,
         par_per_comp: int,
         qmin: NDArray,
         qmax: NDArray,
+        pmodel: str = "multivariate_2d",
         p0: NDArray | None = None,
         fix_params: NDArray | None = None,
         lnk_params: NDArray | None = None,
     ):
         self.data = data
-        self.posterior = posterior
+        self.pmodel = pmodel
         self.nwalkers = nwalkers
         self.nsteps = nsteps
         self.ncomp = ncomp
@@ -96,7 +98,7 @@ class MyEmceeES:
                 self.sampler = emcee.EnsembleSampler(
                     nwalkers=self.nwalkers,
                     ndim=self.ndim,
-                    log_prob_fn=self.posterior,
+                    log_prob_fn=posterior,
                     kwargs={
                         "data": self.data,
                         "qmin": self.qmin,
@@ -105,6 +107,7 @@ class MyEmceeES:
                         "stride": self.par_per_comp,
                         "fix_params": self.fix_params,
                         "lnk_params": self.lnk_params,
+                        "pmodel": self.pmodel,
                     },
                     pool=pool,
                     moves=[
@@ -127,7 +130,12 @@ class MyEmceeES:
                     "stride": self.par_per_comp,
                     "fix_params": self.fix_params,
                     "lnk_params": self.lnk_params,
+                    "pmodel": self.pmodel,
                 },
+                moves=[
+                    (emcee.moves.DEMove(), 0.8),
+                    (emcee.moves.DESnookerMove(), 0.2),
+                ],
             )
             self.sampler.run_mcmc(self.p0, self.nsteps, progress=True)
 

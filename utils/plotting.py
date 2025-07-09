@@ -1,6 +1,5 @@
 import matplotlib as mpl
 import matplotlib.pyplot as plt
-from matplotlib.gridspec import GridSpec
 import matplotlib.cm as cm
 from matplotlib.ticker import MultipleLocator
 
@@ -10,108 +9,111 @@ import numpy as np
 
 from shapely import plotting
 
-from astropy.coordinates import SkyCoord
-import astropy.units as u
+from corner import corner
 
 
-def plot_cmd(ax, df, mag_col, color="black", cmap=None, inverty=True):
+def plot_cmd(
+    b,
+    v,
+    ax=None,
+    ms=1,
+    lw=0.3,
+    color="black",
+    cmap=None,
+    alpha=0.3,
+    inverty=True,
+    **kwargs,
+) -> mpl.figure.Figure:
+
+    if ax is None:
+        _, ax = plt.subplots(layout="constrained")
+
     ax.scatter(
-        df[mag_col[0]] - df[mag_col[1]],
-        df[mag_col[0]],
-        s=1,
-        lw=0.3,
+        b - v,
+        b,
+        s=ms,
+        lw=lw,
         c=color,
         cmap=cmap,
-        alpha=0.3,
+        alpha=alpha,
     )
 
     if inverty:
         ax.invert_yaxis()
 
+    ax.set(**kwargs)
 
-def plot_cmd_comparison(
-    cluster_df,
-    field_df,
-    mag_col_cluster,
-    mag_col_field,
-    title,
+    return ax.get_figure()
+
+
+def plot_membership_overview(
+    btarget,
+    vtarget,
+    bfield,
+    vfield,
+    membership,
+    blabel="$m_{\mathrm{B}}$",
+    vlabel="$m_{\mathrm{V}}$",
     xlim=None,
     ylim=None,
-    inverty=True,
 ):
-    fig, [[ax, ax2], [ax3, ax4]] = plt.subplots(
+    fig, [[ax_cmd_tg, ax_cmd_fl], [ax_cmd_tg_memb, ax_memb_dist]] = plt.subplots(
         2, 2, layout="constrained", figsize=(12, 12)
     )
 
-    ax.set_title("CMD Target")
-    plot_cmd(ax, cluster_df, mag_col_cluster, color="black", inverty=inverty)
-    ax.set_xlabel("$(m_{\mathrm{F606W}} - m_{\mathrm{F814W}})$")
-    ax.set_ylabel("$m_{\mathrm{F606W}}$")
+    plot_cmd(btarget, vtarget, ax_cmd_tg)
+    ax_cmd_tg.set(title="Target", xlabel=f"{blabel} - {vlabel}", ylabel=blabel)
 
     if xlim is not None:
-        ax.set_xlim(xlim)
+        ax_cmd_tg.set_xlim(xlim)
     if ylim is not None:
-        ax.set_ylim(ylim)
+        ax_cmd_tg.set_ylim(ylim)
 
-    ax2.set_title("CMD Field")
-    plot_cmd(ax2, field_df, mag_col_field, color="black", inverty=inverty)
-    ax2.set_xlabel("$(m_{\mathrm{F606W}} - m_{\mathrm{F814W}})$")
-    ax2.set_ylabel("$m_{\mathrm{F606W}}$")
-    ax2.set(xlim=ax.get_xlim(), ylim=ax.get_ylim())
+    plot_cmd(bfield, vfield, ax_cmd_fl)
+    ax_cmd_fl.set(title="Field", xlabel=f"{blabel} - {vlabel}", ylabel=blabel)
+    ax_cmd_fl.set(xlim=ax_cmd_tg.get_xlim(), ylim=ax_cmd_tg.get_ylim())
 
-    ax3.set_title("CMD Target with membership")
-    plot_cmd(
-        ax3,
-        cluster_df,
-        mag_col_cluster,
-        color=cluster_df["membership"],
-        cmap="jet_r",
-        inverty=inverty,
+    plot_cmd(btarget, vtarget, ax_cmd_tg_memb, color=membership, cmap="jet_r")
+    ax_cmd_tg_memb.set(
+        title="Target with membership", xlabel=f"{blabel} - {vlabel}", ylabel=blabel
     )
-    _ = ax3.figure.colorbar(
+    ax_cmd_tg_memb.set(xlim=ax_cmd_tg.get_xlim(), ylim=ax_cmd_tg.get_ylim())
+
+    _ = ax_cmd_tg_memb.figure.colorbar(
         cm.ScalarMappable(cmap="jet_r"),
-        ax=ax3,
+        ax=ax_cmd_tg_memb,
         orientation="horizontal",
         location="top",
         shrink=0.85,
         aspect=30,
         pad=-0.15,
     )
-    ax3.set_xlabel("$(m_{\mathrm{F606W}} - m_{\mathrm{F814W}})$")
-    ax3.set_ylabel("$m_{\mathrm{F606W}}$")
-    ax3.set(xlim=ax.get_xlim(), ylim=ax.get_ylim())
 
-    cluster_df["membership"].plot(
-        ax=ax4,
-        kind="hist",
-        density=True,
-        bins=30,
-        xlabel="Membership",
-        ylabel="Density",
-        label="",
-        align="mid",
+    ax_memb_dist.hist(membership, bins=30, density=True, align="mid")
+    ax_memb_dist.set(
+        title="Membership distribution", xlabel="Membership", ylabel="Density"
     )
-
-    ax4.set_title("Membership distribution")
 
     p = np.percentile(
-        cluster_df["membership"],
+        membership,
         [16, 50, 84],
     )
-    ax4.axvline(p[0], color="red", linestyle="--", label=f"{p[0]:.2f}: 16th percentile")
-    ax4.axvline(
+    ax_memb_dist.axvline(
+        p[0], color="red", linestyle="--", label=f"{p[0]:.2f}: 16th percentile"
+    )
+    ax_memb_dist.axvline(
         p[1],
         color="green",
         linestyle="--",
         label=f"{p[1]:.2f}: 50th percentile",
     )
-    ax4.axvline(
+    ax_memb_dist.axvline(
         p[2],
         color="blue",
         linestyle="--",
         label=f"{p[2]:.2f}: 84th percentile",
     )
-    ax4.legend()
+    ax_memb_dist.legend()
 
     return fig
 
@@ -119,17 +121,13 @@ def plot_cmd_comparison(
 def show_cmds_with_voronoi(
     cvor,
     cpoints,
-    xc,
-    yc,
-    xfl,
-    yfl,
+    b,
+    v,
     padx=0.05,
     pady=0.05,
 ):
 
-    fig = plt.figure(layout="constrained")
-    ax = fig.add_subplot(111)
-    ax.set_title("Field stars CMD (Voronoi Grid)")
+    fig, ax = plt.subplots(layout="constrained")
 
     voronoi_plot_2d(
         cvor,
@@ -141,71 +139,18 @@ def show_cmds_with_voronoi(
         line_width=0.5,
     )
 
-    ax.scatter(xc, yc, s=1, lw=0.5, alpha=0.5, c="red", zorder=2)
-
-    ax.scatter(xfl, yfl, s=1, lw=0.5, alpha=0.5, c="black", zorder=2)
-
     ax.set(
         xlim=[cpoints[:, 0].min() - padx, cpoints[:, 0].max() + padx],
         ylim=[cpoints[:, 1].min() - pady, cpoints[:, 1].max() + pady],
     )
-    ax.invert_yaxis()
-    plt.show()
+    _ = plot_cmd(b, v, ax=ax)
     return fig
 
 
-def spatial_ecdf(df, racol, deccol, rej_thr):
-
-    # get the center of the dataframe
-    center_ra = df[racol].min() + (df[racol].max() - df[racol].min()) / 2
-    center_dec = df[deccol].min() + (df[deccol].max() - df[deccol].min()) / 2
-    center = SkyCoord(center_ra, center_dec, unit=u.deg)
-    distances = center.separation(
-        SkyCoord(
-            df[racol],
-            df[deccol],
-            unit="deg",
-        )
-    ).arcsec
-
-    uniform = np.vstack(
-        (
-            np.random.uniform(low=df[racol].min(), high=df[racol].max(), size=10000),
-            np.random.uniform(low=df[deccol].min(), high=df[deccol].max(), size=10000),
-        )
-    ).T
-    uniform_dist = (
-        np.sqrt(
-            [
-                (uniform[:, 0] - center.ra.deg) ** 2
-                + (uniform[:, 1] - center.dec.deg) ** 2
-            ]
-        )[0]
-        * 3600
-    )
-
-    fig, ax = plt.subplots(
-        layout="tight",
-        subplot_kw={"xlabel": "Distance from center (arcsec)", "ylabel": "ECDF"},
-    )
-    ax.set_title(f"Spatial ECDF at {int(rej_thr*100)}% membership")
-    ax.ecdf(
-        distances[df["membership"] > rej_thr],
-        label="cluster",
-    )
-    ax.ecdf(
-        distances[df["membership"] < rej_thr],
-        label="rejection",
-    )
-    ax.ecdf(uniform_dist, color="red", ls="--", label="uniform decontamination")
-    ax.legend()
-    return fig
-
-
-def _plot_grid_with_counts(ax, regions, pts_in_regions):
+def _plot_grid_with_counts(ax, regions, pts_in_regions, cmap="viridis"):
 
     max_number = max([len(pts) for _, pts in pts_in_regions])
-    cmap = mpl.colormaps["viridis"]
+    cmap = mpl.colormaps[cmap]
     colors = [cmap(len(pts) / max_number) for _, pts in pts_in_regions]
 
     for poli, color in zip(regions, colors):
@@ -228,16 +173,16 @@ def _plot_grid_with_counts(ax, regions, pts_in_regions):
     cbar.set_ticklabels([int(el * max_number) for el in cbar.get_ticks()])
 
 
-def plot_cmd_and_vorgrid(df, col_name, regions, pts_in_regions):
+def plot_cmd_and_vorgrid(b, v, regions, pts_in_regions, cmap="viridis"):
     fig, ax = plt.subplots(layout="constrained")
     ax.set(aspect="auto")
-    _plot_grid_with_counts(ax, regions, pts_in_regions)
-    plot_cmd(ax, df, col_name, color="red")
+    _plot_grid_with_counts(ax, regions, pts_in_regions, cmap=cmap)
+    plot_cmd(ax, b, v, ax=ax, color="red")
     return fig
 
 
-def plot_spatial_membership(df, racol, deccol, member_threshold):
-    fig, [ax_rej, ax_all] = plt.subplots(
+def plot_spatial_membership(ra, dec, membership, member_threshold):
+    fig, [ax_rej, ax_memb] = plt.subplots(
         1,
         2,
         layout="tight",
@@ -245,28 +190,29 @@ def plot_spatial_membership(df, racol, deccol, member_threshold):
         subplot_kw={"xlabel": "RA", "ylabel": "DEC", "aspect": "equal"},
     )
 
-    rej_df = df[df["membership"] < member_threshold].copy()
-    member_df = df[df["membership"] > member_threshold].copy()
+    ra_rej = ra[membership < member_threshold]
+    dec_rej = dec[membership < member_threshold]
+    ra_member = ra[membership > member_threshold]
+    dec_member = dec[membership > member_threshold]
 
-    ax_rej.scatter(rej_df[racol], rej_df[deccol], s=1, lw=0.5, alpha=0.5, c="black")
+    ax_rej.scatter(ra_rej, dec_rej, s=1, lw=0.5, alpha=0.5, c="black")
     ax_rej.set_title("Rejected stars")
 
-    ax_all.scatter(
-        member_df[racol], member_df[deccol], s=1, lw=0.5, alpha=0.5, c="black"
-    )
-
-    ax_all.set_title("Member stars")
+    ax_memb.scatter(ra_member, dec_member, s=1, lw=0.5, alpha=0.5, c="black")
+    ax_memb.set_title("Member stars")
 
     return fig
 
 
-def plot_cmd_membership_overview(
-    df,
-    df_field,
+def plot_decontamination_snapshot(
+    btarget,
+    vtarget,
+    bfield,
+    vfield,
+    membership,
     member_threshold,
-    mag_cols,
-    field_mag_cols,
-    inverty=True,
+    blabel="$m_{\mathrm{B}}$",
+    vlabel="$m_{\mathrm{V}}$",
     xlim=None,
     ylim=None,
 ):
@@ -276,11 +222,9 @@ def plot_cmd_membership_overview(
         layout="constrained",
         figsize=(12, 12),
         subplot_kw={
-            "xlabel": "$(m_{\mathrm{F606W}} - m_{\mathrm{F814W}})$",
-            "ylabel": "$m_{\mathrm{F606W}}$",
+            "xlabel": f"{blabel} - {vlabel}",
+            "ylabel": blabel,
         },
-        sharey=True,
-        sharex=True,
         gridspec_kw={"hspace": 0.05, "wspace": 0.05},
     )
     fig.suptitle(f"Decontamination at {member_threshold * 100:.0f}% membership")
@@ -289,33 +233,27 @@ def plot_cmd_membership_overview(
     ax_rej.set_title("Rejection", y=0.9)
     ax_field.set_title("Parallel field", y=0.9)
 
-    plot_cmd(ax_cluster, df, mag_cols, color="black", inverty=inverty)
+    plot_cmd(btarget, vtarget, ax_cluster)
     plot_cmd(
+        btarget[membership > member_threshold],
+        vtarget[membership > member_threshold],
         ax_decon,
-        df[df["membership"] > member_threshold],
-        mag_cols,
-        color="black",
-        inverty=inverty,
     )
     plot_cmd(
+        btarget[membership < member_threshold],
+        vtarget[membership < member_threshold],
         ax_rej,
-        df[df["membership"] < member_threshold],
-        mag_cols,
-        color="black",
-        inverty=inverty,
     )
-    plot_cmd(ax_field, df_field, field_mag_cols, color="black", inverty=inverty)
-
-    _ = ax_cluster.set(
-        ylim=ax_cluster.get_ylim()[::-1],
-        xticks=ax_cluster.get_xticks(),
-        xticklabels=[f"{el:.1f}" for el in ax_cluster.get_xticks()],
-    )
+    plot_cmd(bfield, vfield, ax_field)
 
     if xlim is not None:
         ax_cluster.set_xlim(xlim)
     if ylim is not None:
         ax_cluster.set_ylim(ylim)
+
+    ax_decon.set(xlim=ax_cluster.get_xlim(), ylim=ax_cluster.get_ylim())
+    ax_rej.set(xlim=ax_cluster.get_xlim(), ylim=ax_cluster.get_ylim())
+    ax_field.set(xlim=ax_cluster.get_xlim(), ylim=ax_cluster.get_ylim())
 
     return fig
 
@@ -363,4 +301,188 @@ def plot_reddening_map(ra, dec, ra0, dec0, delta_E_B_V):
     plt.ticklabel_format(style="plain", useOffset=False, axis="x")
     ax.set_xlabel("RA [deg]")
     ax.set_ylabel("Dec [deg]")
+    return fig
+
+
+def traceplots(
+    chains,
+    naxes=None,
+    useparams=None,
+    delchains=None,
+    usechains=None,
+    showdel=None,
+    burnin=None,
+    labels=None,
+    fnt=None,
+    figsize=None,
+    title="Trace plots",
+    color=None,
+    colorburnin=None,
+    tickoff=None,
+    kwargs=None,
+):
+    """
+    The method plots the traceplots associated to an MCMC run
+
+    Parameters
+    -------------->>
+    chains		:	Chains from MCMC (shape ndraws x nwalkers x dim)
+    naxes		:	Number of rows and columns to plot. Must be a 2d iterable.
+                                    Raise an error if the number of axes is larger than the number
+                                    of parameters to plot. Default is 6 rows and dim/6
+                                    columns
+    useparams	:	Indexes corresponing to the parameters to plot. Default all
+    delchains	:	Chains to discard. Default None
+    Usechains	:	Chains to use. Default all. If usechains is given, delchains
+                                    is ignored
+    burnin		:	Burn-in. Default None
+    labels		:	Labels corresponing to each parameter
+    fnt 		: 	Label size. Default {labesize:16}
+    figsize		:	Size of figure. Default (6,6)
+    title       :	Title of the figure. Default "Trace plots"
+    color		:	Color used for the chains (all chains have the same color). Defult black
+    colorburnin	:	Color used for the burn-in. Defult salmon
+    tickoff		:	if True, delete labels and ticks on overlapping panels
+    kwargs		: 	additional dictionary to be used in plot
+
+    """
+
+    ndraws, nwalkers, dim = chains.shape
+
+    # 	#	#	sanity check on parameters
+
+    # 	usechains and delchains work together
+    if usechains is None and delchains is None:
+        usechains = np.linspace(0, nwalkers - 1, nwalkers, dtype=int)
+
+    if usechains is not None:
+        if np.isscalar(usechains):
+            usechains = np.asarray([usechains])
+        elif np.iterable(usechains):
+            usechains = np.asarray(usechains)
+        else:
+            raise ValueError("usechains: invalid parameter")
+
+    # 	show delated chains
+    if showdel is None:
+        showdel = False
+
+    # 	parameters to show
+    if useparams is None:
+        useparams = np.linspace(0, dim - 1, dim, dtype=int)
+    if np.iterable(useparams) or np.scalar(useparams):
+        useparams = np.asarray(useparams)
+    dim = useparams.shape[0]
+
+    # 	number of rows and columns in trace plots
+    if naxes is None:
+        naxes = [dim, 1] if dim <= 6 else [6, int(dim / 6) + 1]
+
+    if not np.iterable(naxes):
+        raise ValueError("naxes: invalid number of rows and cols")
+    else:
+        nrows, ncols = naxes[0], naxes[1]
+        if nrows * ncols < dim:
+            raise ValueError("Parameters required do not match number of axes")
+
+    # 	check labels
+    if labels is None:
+        labels = np.asarray(["param " + str(i) for i in range(dim)])
+    if np.iterable(labels) or isinstance(labels, str):
+        labels = np.asarray(labels)
+        if labels.shape[0] != dim:
+            raise ValueError("labels: invalid number of labels")
+
+    # 	remaining parameters
+    if burnin is None:
+        burnin = 0
+    if colorburnin is None:
+        colorburnin = "salmon"
+    if color is None:
+        color = "black"
+    if tickoff is None:
+        tickoff = False
+    if kwargs is None:
+        kwargs = {"lw": 0.5, "ls": "-"}
+    if fnt is None:
+        fnt = {"fontsize": 16}
+    if figsize is None:
+        figsize = (6, 6)
+
+    fig, ax = plt.subplots(nrows, ncols, figsize=figsize)
+    for prm, aa in zip(useparams, ax.T.reshape(-1)):
+        aa.plot(
+            np.linspace(burnin, ndraws - 1, ndraws - burnin),
+            chains[burnin:, usechains, prm],
+            color=color,
+            **kwargs,
+        )
+        aa.plot(
+            np.linspace(0, burnin - 1, burnin),
+            chains[:burnin, usechains, prm],
+            color=colorburnin,
+            **kwargs,
+        )
+
+    # 	show delated chain
+    if showdel and delchains is not None:
+        for prm, aa in zip(useparams, ax.T.reshape(-1)):
+            aa.plot(
+                np.linspace(burnin, ndraws - 1, ndraws - burnin),
+                chains[burnin:, delchains, prm],
+                color=colorburnin,
+                **kwargs,
+            )
+            aa.plot(
+                np.linspace(0, burnin - 1, burnin),
+                chains[:burnin, delchains, prm],
+                color=color,
+                **kwargs,
+            )
+
+    # 	labels
+    for label, aa in zip(labels, ax.T.reshape(nrows * ncols)):
+        aa.set_ylabel(label, **fnt)
+        aa.set_xlabel("draws", **fnt)
+        aa.set_xlim(0, ndraws)
+
+    # 	delete overlapping labels
+    if tickoff:
+        for aa in ax.reshape(-1)[: (dim - naxes[1])]:
+            aa.set_xlabel("")
+            aa.set_xticklabels([])
+
+    # 	delete un-used axes
+    if dim < nrows * ncols:
+        for aa in ax.T.reshape(nrows * ncols)[dim : nrows * ncols]:
+            fig.delaxes(aa)
+
+    fig.suptitle(title, fontsize=2.5 * max(fig.get_size_inches()))
+    return fig
+
+
+def plot_corner(
+    chain,
+    labels=None,
+    quantiles=[0.16, 0.5, 0.84],
+    bins=20,
+    truths=None,
+    title="Corner plots",
+    **kwargs,
+):
+
+    labels = (
+        labels if labels is not None else [f"C{i+1}" for i in range(chain.shape[-1])]
+    )
+    fig = corner(
+        chain,
+        labels=labels,
+        quantiles=quantiles,
+        bins=bins,
+        verbose=False,
+        truths=truths,
+        show_titles=True,
+        **kwargs,
+    )
+    fig.suptitle(title, fontsize=2.5 * max(fig.get_size_inches()))
     return fig

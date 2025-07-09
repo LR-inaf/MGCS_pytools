@@ -1,9 +1,41 @@
 import numpy as np
 from numpy.typing import NDArray
-from .multivariate_2d import mvar_norm
 
 
-def _logl(data, prm, component, stride=5) -> float:
+def mvar_norm(
+    x1: NDArray, x2: NDArray, mu1: NDArray, mu2: NDArray, cov: NDArray
+) -> NDArray:
+    """Multivariate normal distribution function.
+
+    Parameters
+    ----------
+    x1 : `NDArray`
+        Input along first dimension.
+    x2 : `NDArray`
+        Input along second dimension.
+    mu1 : `NDArray`
+        Mean value along first dimension.
+    mu2 : `NDArray`
+        Mean value along first dimension.
+    cov : `NDArray`
+        Covariance matrix.
+
+    Returns
+    -------
+    `NDArray`
+        Probability density function.
+    """
+
+    diff = np.array([x1 - mu1, x2 - mu2]).T
+    minv = np.linalg.inv(cov)
+    norm = 1.0 / (2.0 * np.pi * np.sqrt(np.linalg.det(cov)))
+    prod1 = np.matmul(minv, diff[:, :, np.newaxis])
+    prod2 = np.matmul(diff[:, np.newaxis, :], prod1)
+
+    return norm * np.exp(-0.5 * prod2.T)
+
+
+def _logl(data, prm, component, stride=5):
 
     #   unpack data
     pm_ra = data[:, 0]
@@ -23,15 +55,19 @@ def _logl(data, prm, component, stride=5) -> float:
         cprm = prm[(i * stride) : (i + 1) * stride]
         sigma_ra = np.sqrt(cprm[2] * cprm[2] + epm_ra * epm_ra)
         sigma_dec = np.sqrt(cprm[3] * cprm[3] + epm_dec * epm_dec)
+        rho_eff = [
+            (cprm[-1] * cprm[2] * cprm[3]) / (c_si_ra * c_si_dec)
+            for c_si_ra, c_si_dec in zip(sigma_ra, sigma_dec)
+        ]
         cov = np.array(
             [
                 np.array(
                     [
-                        [c_si_ra * c_si_ra, cprm[-1] * c_si_ra * c_si_dec],
-                        [cprm[-1] * c_si_ra * c_si_dec, c_si_dec * c_si_dec],
+                        [c_si_ra * c_si_ra, reff * c_si_ra * c_si_dec],
+                        [reff * c_si_ra * c_si_dec, c_si_dec * c_si_dec],
                     ]
                 )
-                for c_si_ra, c_si_dec in zip(sigma_ra, sigma_dec)
+                for c_si_ra, c_si_dec, reff in zip(sigma_ra, sigma_dec, rho_eff)
             ]
         )
 

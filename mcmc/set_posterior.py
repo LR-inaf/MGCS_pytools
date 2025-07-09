@@ -1,6 +1,5 @@
 import numpy as np
 from numpy.typing import NDArray
-from .multivariate_2d_posterior import _logl, _lnprior
 
 
 def posterior(
@@ -9,6 +8,7 @@ def posterior(
     qmin: NDArray,
     qmax: NDArray,
     component: NDArray,
+    pmodel: str = "multivariate_2d",
     fix_params: NDArray | None = None,
     lnk_params: NDArray | None = None,
     stride: int = 5,
@@ -27,6 +27,9 @@ def posterior(
         Upper limits for priors.
     component : `NDArray`
         Number of components to fit.
+    pmodel : `str`, optional
+        Model to use for the posterior. Default is "multivariate_2d".
+        Currently, only "multivariate_2d" is supported.
     fix_params : `NDArray` or `None`, optional
         Array containing the fixed parameters.
         If `None`, no parameters will be fixed. Defaul is `None`
@@ -42,6 +45,12 @@ def posterior(
     `NDArray`
         Logarithm of the posterior probability.
     """
+
+    if pmodel == "multivariate_2d":
+        from .multivariate_2d_posterior import _logl, _lnprior
+    else:
+        raise ValueError(f"Model {pmodel} is not supported.")
+
     lp = _lnprior(prm, qmin, qmax, component)
 
     if fix_params is not None:
