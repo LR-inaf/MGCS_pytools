@@ -8,7 +8,7 @@ def posterior(
     qmin: NDArray,
     qmax: NDArray,
     component: NDArray,
-    pmodel: str = "multivariate_2d",
+    pmodel: str = "bivariate_normal",
     fix_params: NDArray | None = None,
     lnk_params: NDArray | None = None,
     stride: int = 5,
@@ -28,8 +28,8 @@ def posterior(
     component : `NDArray`
         Number of components to fit.
     pmodel : `str`, optional
-        Model to use for the posterior. Default is "multivariate_2d".
-        Currently, only "multivariate_2d" is supported.
+        Model to use for the posterior. Default is "bivariate_normal".
+        Currently, only "bivariate_normal" is supported.
     fix_params : `NDArray` or `None`, optional
         Array containing the fixed parameters.
         If `None`, no parameters will be fixed. Defaul is `None`
@@ -46,8 +46,8 @@ def posterior(
         Logarithm of the posterior probability.
     """
 
-    if pmodel == "multivariate_2d":
-        from .multivariate_2d_posterior import _logl, _lnprior
+    if pmodel == "bivariate_normal":
+        from .bivariate_normal import _logl, _lnprior
     else:
         raise ValueError(f"Model {pmodel} is not supported.")
 

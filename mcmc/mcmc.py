@@ -49,7 +49,7 @@ class MyEmceeES:
         par_per_comp: int,
         qmin: NDArray,
         qmax: NDArray,
-        pmodel: str = "multivariate_2d",
+        pmodel: str = "bivariate_normal",
         p0: NDArray | None = None,
         fix_params: NDArray | None = None,
         lnk_params: NDArray | None = None,
@@ -121,7 +121,7 @@ class MyEmceeES:
             self.sampler = emcee.EnsembleSampler(
                 nwalkers=self.nwalkers,
                 ndim=self.ndim,
-                log_prob_fn=self.posterior,
+                log_prob_fn=posterior,
                 kwargs={
                     "data": self.data,
                     "qmin": self.qmin,

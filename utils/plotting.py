@@ -2,28 +2,60 @@ import matplotlib as mpl
 import matplotlib.pyplot as plt
 import matplotlib.cm as cm
 from matplotlib.ticker import MultipleLocator
+from mpl_toolkits.axes_grid1.inset_locator import inset_axes
 
-from scipy.spatial import voronoi_plot_2d
+from scipy.spatial import voronoi_plot_2d, Voronoi
+from scipy.stats import norm
 
 import numpy as np
+from numpy.typing import NDArray
 
-from shapely import plotting
+from shapely import plotting, Polygon
 
 from corner import corner
 
 
+########################
+# PLOT UTILS FOR STATISTICAL MEMBERSHIP, CMD DISPLAY AND REDDENING
 def plot_cmd(
-    b,
-    v,
-    ax=None,
-    ms=1,
-    lw=0.3,
-    color="black",
-    cmap=None,
-    alpha=0.3,
-    inverty=True,
+    b: NDArray,
+    v: NDArray,
+    ax: mpl.axes.Axes | None = None,
+    ms: int = 1,
+    lw: float = 0.3,
+    color: str = "black",
+    cmap: str | None = None,
+    alpha: float = 0.3,
+    inverty: bool = True,
     **kwargs,
 ) -> mpl.figure.Figure:
+    """Plot CMD (Color-Magnitude Diagram) with optional customization.
+
+    Parameters:
+        b: `NDArray`
+            Magnitudes in band B
+        v: `NDArray`
+            Magnitudes in band V
+        ax: `mpl.axes.Axes`
+            Axes to plot on (optional)
+        ms: `int`
+            Marker size (default: 1)
+        lw: `float`
+            Line width (default: 0.3)
+        color: `str`
+            Marker color (default: "black")
+        cmap: `str | None`
+            Colormap for coloring points (default: None)
+        alpha: `float`
+            Transparency level (default: 0.3)
+        inverty: `bool`
+            Whether to invert the y-axis (default: True)
+        **kwargs:
+            Additional keyword arguments for customization
+
+    Returns: `mpl.figure.Figure`
+        Figure object containing the CMD plot
+    """
 
     if ax is None:
         _, ax = plt.subplots(layout="constrained")
@@ -47,16 +79,40 @@ def plot_cmd(
 
 
 def plot_membership_overview(
-    btarget,
-    vtarget,
-    bfield,
-    vfield,
-    membership,
-    blabel="$m_{\mathrm{B}}$",
-    vlabel="$m_{\mathrm{V}}$",
-    xlim=None,
-    ylim=None,
-):
+    btarget: NDArray,
+    vtarget: NDArray,
+    bfield: NDArray,
+    vfield: NDArray,
+    membership: NDArray,
+    blabel: str = "$m_{\mathrm{B}}$",
+    vlabel: str = "$m_{\mathrm{V}}$",
+    xlim: tuple[float, float] = None,
+    ylim: tuple[float, float] = None,
+) -> mpl.figure.Figure:
+    """Plot an overview of membership in the CMD space.
+    Parameters:
+        btarget: `NDArray`
+            Magnitudes in band B for the target
+        vtarget: `NDArray`
+            Magnitudes in band V for the target
+        bfield: `NDArray`
+            Magnitudes in band B for the field
+        vfield: `NDArray`
+            Magnitudes in band V for the field
+        membership: `NDArray`
+            Membership values for the target stars
+        blabel: `str`
+            Label for the B band (default: "$m_{\mathrm{B}}$")
+        vlabel: `str`
+            Label for the V band (default: "$m_{\mathrm{V}}$")
+        xlim: `tuple[float, float]`
+            X-axis limits (default: None)
+        ylim: `tuple[float, float]`
+            Y-axis limits (default: None)
+
+    Returns: `mpl.figure.Figure`
+        Figure object containing the membership overview plot
+    """
     fig, [[ax_cmd_tg, ax_cmd_fl], [ax_cmd_tg_memb, ax_memb_dist]] = plt.subplots(
         2, 2, layout="constrained", figsize=(12, 12)
     )
@@ -119,13 +175,31 @@ def plot_membership_overview(
 
 
 def show_cmds_with_voronoi(
-    cvor,
-    cpoints,
-    b,
-    v,
-    padx=0.05,
-    pady=0.05,
-):
+    cvor: Voronoi,
+    cpoints: NDArray,
+    b: NDArray,
+    v: NDArray,
+    padx: float = 0.05,
+    pady: float = 0.05,
+) -> mpl.figure.Figure:
+    """Show CMDs with Voronoi tessellation.
+    Parameters:
+        cvor: `Voronoi`
+            Voronoi diagram to plot
+        cpoints: `NDArray`
+            Points to plot
+        b: `NDArray`
+            B-band magnitudes
+        v: `NDArray`
+            V-band magnitudes
+        padx: `float`
+            Padding for x-axis
+        pady: `float`
+            Padding for y-axis
+
+    Returns: `mpl.figure.Figure`
+        Figure object containing the CMD plot with Voronoi tessellation
+    """
 
     fig, ax = plt.subplots(layout="constrained")
 
@@ -147,8 +221,24 @@ def show_cmds_with_voronoi(
     return fig
 
 
-def _plot_grid_with_counts(ax, regions, pts_in_regions, cmap="viridis"):
-
+def _plot_grid_with_counts(
+    ax: mpl.axes.Axes,
+    regions: list[Polygon],
+    pts_in_regions: list[tuple],
+    cmap: str = "viridis",
+):
+    """
+    Plot a Voronoi grid with counts of points in each region.
+    Parameters:
+        ax: `mpl.axes.Axes`
+            The axes to plot on
+        regions: `list[Polygon]`
+            The Voronoi regions
+        pts_in_regions: `list[tuple]`
+            The points in each region
+        cmap: `str`
+            The colormap to use
+    """
     max_number = max([len(pts) for _, pts in pts_in_regions])
     cmap = mpl.colormaps[cmap]
     colors = [cmap(len(pts) / max_number) for _, pts in pts_in_regions]
@@ -304,6 +394,8 @@ def plot_reddening_map(ra, dec, ra0, dec0, delta_E_B_V):
     return fig
 
 
+########################
+# PLOT UTILS FOR MCMC
 def traceplots(
     chains,
     naxes=None,
@@ -485,4 +577,268 @@ def plot_corner(
         **kwargs,
     )
     fig.suptitle(title, fontsize=2.5 * max(fig.get_size_inches()))
+    return fig
+
+
+def _generate_gaussian_distribution_from_mcmc_chain(
+    x, ch, mupar, sigmapar, w=None, sigma_error=None
+):
+    if w is None:
+        w = np.ones(ch.shape[0])
+
+    if sigma_error is None:
+        sigma_error = np.zeros(ch.shape[0])
+
+    return np.array(
+        [
+            wi
+            * norm.pdf(
+                x=np.sort(x),
+                loc=mu,
+                scale=np.sqrt(
+                    sig * sig + np.median(sigma_error) * np.median(sigma_error)
+                ),
+            )
+            for mu, sig, wi in zip(ch[:, mupar], ch[:, sigmapar], w)
+        ]
+    )
+
+
+def plot_vpd_and_mdist_component(
+    mux,
+    muy,
+    ch,
+    membership=None,
+    ncomp=1,
+    par_per_comp=5,
+    component_labels=None,
+    w=None,
+    muxpar=0,
+    muypar=1,
+    sigxpar=2,
+    sigypar=3,
+    xerror=None,
+    yerror=None,
+    vpd_xlabel=None,
+    vpd_ylabel=None,
+    figsize_inches=8,
+    wspace=0.05,
+    hspace=0.05,
+    figsize_wadjust=0.0,
+    figsize_hadjust=-0.6,
+    xlim=None,
+    ylim=None,
+):
+
+    layout = [("histx", "."), ("vpd", "histy")]
+    fig, axs_dict = plt.subplot_mosaic(
+        layout,
+        figsize=(figsize_inches + figsize_wadjust, figsize_inches + figsize_hadjust),
+        width_ratios=[1, 0.3],
+        height_ratios=[0.3, 1],
+        gridspec_kw={"wspace": wspace, "hspace": hspace},
+        layout="compressed",
+    )
+
+    capsize = 1.5
+    ms = 15
+    elw = 1.0
+
+    # VPD
+    if xerror is not None and yerror is None:
+        axs_dict["vpd"].errorbar(
+            mux,
+            muy,
+            xerr=xerror,
+            fmt="ok",
+            capsize=capsize,
+            elinewidth=elw,
+            ms=0.0,
+            alpha=0.1,
+        )
+    elif yerror is not None and xerror is None:
+        axs_dict["vpd"].errorbar(
+            mux,
+            muy,
+            yerr=yerror,
+            fmt="ok",
+            capsize=capsize,
+            elinewidth=elw,
+            ms=0.0,
+            alpha=0.1,
+        )
+    elif xerror is not None and yerror is not None:
+        axs_dict["vpd"].errorbar(
+            mux,
+            muy,
+            xerr=xerror,
+            yerr=yerror,
+            fmt="ok",
+            capsize=capsize,
+            elinewidth=elw,
+            ms=0.0,
+            alpha=0.1,
+        )
+
+    if membership is None:
+        sc = axs_dict["vpd"].scatter(mux, muy, s=ms, c="black", zorder=10)
+    else:
+        sc = axs_dict["vpd"].scatter(
+            mux,
+            muy,
+            s=ms,
+            lw=0.5,
+            edgecolor="black",
+            c=membership,
+            cmap="coolwarm",
+            zorder=10,
+        )
+
+        cb_ax = inset_axes(
+            axs_dict["vpd"], width="35%", height="3%", loc="upper right", borderpad=1
+        )
+        cbar = plt.colorbar(sc, cax=cb_ax, orientation="horizontal")
+        cbar.ax.tick_params(labelsize=8)
+
+    if xlim is not None:
+        axs_dict["vpd"].set(xlim=xlim)
+
+    if ylim is not None:
+        axs_dict["vpd"].set(ylim=ylim)
+
+    cmap = mpl.colormaps["Set1"]
+    component_colors = [cmap(i) for i in range(ncomp)]
+
+    # Mdist
+    mdist_x_sum = None
+    mdist_y_sum = None
+    for i in range(ncomp):
+
+        # set parameters for each component
+        muxp = muxpar + i * par_per_comp
+        muyp = muypar + i * par_per_comp
+        sigxp = sigxpar + i * par_per_comp
+        sigyp = sigypar + i * par_per_comp
+
+        if i == ncomp - 1 and w is not None:
+            ww = 1 - np.sum(w, axis=0)
+        elif w is not None:
+            ww = w[i]
+        else:
+            ww = None
+
+        mdist_x = _generate_gaussian_distribution_from_mcmc_chain(
+            x=mux,
+            ch=ch,
+            mupar=muxp,
+            sigmapar=sigxp,
+            w=ww,
+            sigma_error=xerror,
+        )
+        if mdist_x_sum is None:
+            mdist_x_sum = mdist_x
+        else:
+            mdist_x_sum += mdist_x
+
+        mdist_y = _generate_gaussian_distribution_from_mcmc_chain(
+            x=muy,
+            ch=ch,
+            mupar=muyp,
+            sigmapar=sigyp,
+            w=ww,
+            sigma_error=yerror,
+        )
+        if mdist_y_sum is None:
+            mdist_y_sum = mdist_y
+        else:
+            mdist_y_sum += mdist_y
+
+        for pdfx, pdfy in zip(mdist_x, mdist_y):
+            axs_dict["histx"].plot(
+                np.sort(mux),
+                pdfx,
+                color=component_colors[i],
+                alpha=0.1,
+            )
+            axs_dict["histy"].plot(
+                pdfy,
+                np.sort(muy),
+                color=component_colors[i],
+                alpha=0.1,
+            )
+    for pdfx, pdfy in zip(mdist_x_sum, mdist_y_sum):
+        axs_dict["histx"].plot(
+            np.sort(mux),
+            pdfx,
+            color="gray",
+            alpha=0.05,
+        )
+        axs_dict["histy"].plot(
+            pdfy,
+            np.sort(muy),
+            color="gray",
+            alpha=0.05,
+        )
+
+    if component_labels is None:
+        component_labels = [f"C{i+1}" for i in range(ncomp)] + ["SUM"]
+    else:
+        assert len(component_labels) == ncomp, "Component labels length mismatch."
+        component_labels = component_labels + ["SUM"]
+
+    # Create legend
+    handles = [
+        mpl.lines.Line2D([0], [0], color=component_colors[i], lw=2.0)
+        for i in range(ncomp)
+    ] + [mpl.lines.Line2D([0], [0], color="gray", lw=2.0)]
+    axs_dict["histx"].legend(
+        handles, component_labels, loc="upper left", ncols=2, frameon=False
+    )
+
+    # Histograms
+    bins = 50
+    _ = axs_dict["histx"].hist(
+        mux,
+        bins=bins,
+        density=True,
+        alpha=0.3,
+        color="gray",
+        histtype="stepfilled",
+        linewidth=1.5,
+        edgecolor="black",
+    )
+    _ = axs_dict["histy"].hist(
+        muy,
+        bins=bins,
+        density=True,
+        alpha=0.3,
+        color="gray",
+        histtype="stepfilled",
+        orientation="horizontal",
+        linewidth=1.5,
+        edgecolor="black",
+    )
+
+    # axes adjustments
+    axs_dict["vpd"].set(aspect="equal", xlabel=vpd_xlabel, ylabel=vpd_ylabel)
+    vpd_xlim = axs_dict["vpd"].get_xlim()
+    vpd_ylim = axs_dict["vpd"].get_ylim()
+
+    axs_dict["histx"].set(
+        ylabel="PDF",
+        xticks=[],
+        xlim=vpd_xlim,
+        yscale="log",
+        ylim=(1e-4, axs_dict["histx"].get_ylim()[1]),
+    )
+    axs_dict["histy"].set(
+        xlabel="PDF",
+        yticks=[],
+        ylim=vpd_ylim,
+        xscale="log",
+        xlim=(1e-4, axs_dict["histx"].get_xlim()[1]),
+    )
+    axs_dict["histy"].tick_params(which="both", direction="in")
+    axs_dict["histx"].tick_params(which="both", direction="in")
+    axs_dict["vpd"].tick_params(which="both", direction="in")
     return fig
