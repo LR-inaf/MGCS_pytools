@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "MGCS_pytools"
-version = "0.1.0"
+version = "0.1.1"
 description = "A collection of Python tools for data analysis and visualization made for the MGCS HST Treasury program."
 readme = "README.md"
 license = "MIT"
@@ -34,5 +34,5 @@ package-dir = {"" = "src"}
 where = ["src"]
 
 [project.urls]
-"Homepage" = "https://https://github.com/LR-inaf/MGCS_pytools"
+"Homepage" = "https://github.com/LR-inaf/MGCS_pytools"
 "Bug Tracker" = "https://github.com/LR-inaf/MGCS_pytools/issues"
