@@ -1,0 +1,25 @@
+Metadata-Version: 2.4
+Name: MGCS_pytools
+Version: 0.1.0
+Summary: A collection of Python tools for data analysis and visualization made for the MGCS HST Treasury program.
+Author-email: Luca Rosignoli <luca.rosignoli@inaf.it>
+License-Expression: MIT
+Project-URL: Homepage, https://https://github.com/LR-inaf/MGCS_pytools
+Project-URL: Bug Tracker, https://github.com/LR-inaf/MGCS_pytools/issues
+Description-Content-Type: text/markdown
+License-File: LICENSE
+Requires-Dist: numpy
+Requires-Dist: pandas
+Requires-Dist: shapely
+Requires-Dist: scipy
+Requires-Dist: matplotlib
+Requires-Dist: astropy
+Requires-Dist: emcee
+Requires-Dist: corner
+Requires-Dist: tqdm
+Requires-Dist: seaborn
+Requires-Dist: h5py
+Requires-Dist: scikit-learn
+Dynamic: license-file
+
+# Python tools used for the Missing Globular Cluster Survey
