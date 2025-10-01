@@ -88,6 +88,7 @@ def plot_membership_overview(
     vlabel: str = "$m_{\mathrm{V}}$",
     xlim: tuple[float, float] = None,
     ylim: tuple[float, float] = None,
+    cmd_cmap: str = "coolwarm",
 ) -> mpl.figure.Figure:
     """Plot an overview of membership in the CMD space.
     Parameters:
@@ -109,6 +110,8 @@ def plot_membership_overview(
             X-axis limits (default: None)
         ylim: `tuple[float, float]`
             Y-axis limits (default: None)
+        cmd_cmap: `str`
+            Colormap for the CMD plots (default: "coolwarm")
 
     Returns: `mpl.figure.Figure`
         Figure object containing the membership overview plot
@@ -129,14 +132,14 @@ def plot_membership_overview(
     ax_cmd_fl.set(title="Field", xlabel=f"{blabel} - {vlabel}", ylabel=blabel)
     ax_cmd_fl.set(xlim=ax_cmd_tg.get_xlim(), ylim=ax_cmd_tg.get_ylim())
 
-    plot_cmd(btarget, vtarget, ax_cmd_tg_memb, color=membership, cmap="jet_r")
+    plot_cmd(btarget, vtarget, ax_cmd_tg_memb, color=membership, cmap=cmd_cmap)
     ax_cmd_tg_memb.set(
         title="Target with membership", xlabel=f"{blabel} - {vlabel}", ylabel=blabel
     )
     ax_cmd_tg_memb.set(xlim=ax_cmd_tg.get_xlim(), ylim=ax_cmd_tg.get_ylim())
 
     _ = ax_cmd_tg_memb.figure.colorbar(
-        cm.ScalarMappable(cmap="jet_r"),
+        cm.ScalarMappable(cmap=cmd_cmap),
         ax=ax_cmd_tg_memb,
         orientation="horizontal",
         location="top",
@@ -580,6 +583,64 @@ def plot_corner(
     return fig
 
 
+def univar_norm_pdf(
+    x: NDArray,
+    mu: NDArray | float,
+    sigma: NDArray | float,
+    w: NDArray | float = 1.0,
+) -> NDArray:
+    """
+    Weighted PDF of the univariate normal distribution.
+
+    Parameters
+    ----------
+    x : array, shape (Nx,)
+        Values at which to compute the pdf
+    mu : float o array, shape (Nparams,)
+        Mean of the distribution (single or multiple)
+    sigma : float o array, shape (Nparams,)
+        Standard deviation (single or multiple)
+    w : float o array, shape (Nparams,), default=1.0
+        Weight for each distribution
+
+    Returns
+    -------
+    pdf : array
+        - shape (Nx,)
+        - shape (Nparams, Nx)
+    """
+    x = np.atleast_1d(x)
+    mu = np.atleast_1d(mu)
+    sigma = np.atleast_1d(sigma)
+    w = np.atleast_1d(w)
+
+    # Allinea le dimensioni
+    max_len = max(mu.size, sigma.size, w.size)
+
+    if mu.size == 1:
+        mu = np.full(max_len, mu.item(), dtype=float)
+    if sigma.size == 1:
+        sigma = np.full(max_len, sigma.item(), dtype=float)
+    if w.size == 1:
+        w = np.full(max_len, w.item(), dtype=float)
+
+    if not (mu.size == sigma.size == w.size):
+        raise ValueError("mu and sigma must have the same length or be scalars.")
+
+    # Broadcasting on x: (Nparams, Nx)
+    diff = x[None, :] - mu[:, None]
+    pdf = (
+        w[:, None]
+        * (1.0 / (sigma[:, None] * np.sqrt(2.0 * np.pi)))
+        * np.exp(-0.5 * (diff / sigma[:, None]) ** 2)
+    )
+
+    # If all inputs were scalars, return a 1D array
+    if max_len == 1:
+        return pdf.ravel()
+    return pdf
+
+
 def _generate_gaussian_distribution_from_mcmc_chain(
     x, ch, mupar, sigmapar, w=None, sigma_error=None
 ):
@@ -589,18 +650,13 @@ def _generate_gaussian_distribution_from_mcmc_chain(
     if sigma_error is None:
         sigma_error = np.zeros(ch.shape[0])
 
-    return np.array(
-        [
-            wi
-            * norm.pdf(
-                x=np.sort(x),
-                loc=mu,
-                scale=np.sqrt(
-                    sig * sig + np.median(sigma_error) * np.median(sigma_error)
-                ),
-            )
-            for mu, sig, wi in zip(ch[:, mupar], ch[:, sigmapar], w)
-        ]
+    sigma = np.sqrt(ch[:, sigmapar] ** 2 + np.median(sigma_error) ** 2)
+
+    return univar_norm_pdf(
+        x,
+        ch[:, mupar],
+        sigma,
+        w=w,
     )
 
 
@@ -628,6 +684,8 @@ def plot_vpd_and_mdist_component(
     figsize_hadjust=-0.6,
     xlim=None,
     ylim=None,
+    membership_cmap="coolwarm",
+    hist_scale="log",
 ):
 
     layout = [("histx", "."), ("vpd", "histy")]
@@ -690,7 +748,9 @@ def plot_vpd_and_mdist_component(
             lw=0.5,
             edgecolor="black",
             c=membership,
-            cmap="coolwarm",
+            cmap=membership_cmap,
+            vmin=0,
+            vmax=1,
             zorder=10,
         )
 
@@ -728,7 +788,7 @@ def plot_vpd_and_mdist_component(
             ww = None
 
         mdist_x = _generate_gaussian_distribution_from_mcmc_chain(
-            x=mux,
+            x=np.sort(mux),
             ch=ch,
             mupar=muxp,
             sigmapar=sigxp,
@@ -741,7 +801,7 @@ def plot_vpd_and_mdist_component(
             mdist_x_sum += mdist_x
 
         mdist_y = _generate_gaussian_distribution_from_mcmc_chain(
-            x=muy,
+            x=np.sort(muy),
             ch=ch,
             mupar=muyp,
             sigmapar=sigyp,
@@ -753,32 +813,44 @@ def plot_vpd_and_mdist_component(
         else:
             mdist_y_sum += mdist_y
 
-        for pdfx, pdfy in zip(mdist_x, mdist_y):
-            axs_dict["histx"].plot(
-                np.sort(mux),
-                pdfx,
-                color=component_colors[i],
-                alpha=0.1,
-            )
-            axs_dict["histy"].plot(
-                pdfy,
-                np.sort(muy),
-                color=component_colors[i],
-                alpha=0.1,
-            )
-    for pdfx, pdfy in zip(mdist_x_sum, mdist_y_sum):
-        axs_dict["histx"].plot(
+        # x dist fillbetween
+        low = np.percentile(mdist_x, 5, axis=0)
+        high = np.percentile(mdist_x, 95, axis=0)
+        axs_dict["histx"].fill_between(
             np.sort(mux),
-            pdfx,
-            color="gray",
-            alpha=0.05,
+            low,
+            high,
+            color=component_colors[i],
         )
-        axs_dict["histy"].plot(
-            pdfy,
+
+        # y dist fillbetween
+        low = np.percentile(mdist_y, 5, axis=0)
+        high = np.percentile(mdist_y, 95, axis=0)
+        axs_dict["histy"].fill_betweenx(
             np.sort(muy),
-            color="gray",
-            alpha=0.05,
+            low,
+            high,
+            color=component_colors[i],
         )
+
+    # sum fill between
+    low = np.percentile(mdist_x_sum, 5, axis=0)
+    high = np.percentile(mdist_x_sum, 95, axis=0)
+    axs_dict["histx"].fill_between(
+        np.sort(mux),
+        low,
+        high,
+        color="gray",
+    )
+
+    low = np.percentile(mdist_y_sum, 5, axis=0)
+    high = np.percentile(mdist_y_sum, 95, axis=0)
+    axs_dict["histy"].fill_betweenx(
+        np.sort(muy),
+        low,
+        high,
+        color="gray",
+    )
 
     if component_labels is None:
         component_labels = [f"C{i+1}" for i in range(ncomp)] + ["SUM"]
@@ -796,7 +868,7 @@ def plot_vpd_and_mdist_component(
     )
 
     # Histograms
-    bins = 50
+    bins = 100
     _ = axs_dict["histx"].hist(
         mux,
         bins=bins,
@@ -828,15 +900,15 @@ def plot_vpd_and_mdist_component(
         ylabel="PDF",
         xticks=[],
         xlim=vpd_xlim,
-        yscale="log",
+        yscale=hist_scale,
         ylim=(1e-4, axs_dict["histx"].get_ylim()[1]),
     )
     axs_dict["histy"].set(
         xlabel="PDF",
         yticks=[],
         ylim=vpd_ylim,
-        xscale="log",
-        xlim=(1e-4, axs_dict["histx"].get_xlim()[1]),
+        xscale=hist_scale,
+        xlim=(1e-4, axs_dict["histy"].get_xlim()[1]),
     )
     axs_dict["histy"].tick_params(which="both", direction="in")
     axs_dict["histx"].tick_params(which="both", direction="in")

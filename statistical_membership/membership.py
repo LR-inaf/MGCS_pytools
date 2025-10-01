@@ -1,6 +1,8 @@
 import numpy as np
 from math import modf
 
+from pandas import DataFrame
+
 import matplotlib.pyplot as plt
 
 from astropy.coordinates import SkyCoord
@@ -22,11 +24,43 @@ from .region_tools import get_regions_count, get_pts_in_regions
 
 import sys
 
-sys.path.append("..")  # add parent directory to path
-from utils import plotting as utplot
+# sys.path.append("..")  # add parent directory to path
+from ..mcmc.utils import plotting as utplot
+
+#
+#
+# !!!!!!!! THIS CODE IS STILL UNDER DEVELOPMENT !!!!!!!!
+#
+#
 
 
-def spatial_groupby(df_cluster, df_field, racol, deccol, minstars=200):
+def spatial_groupby(
+    df_cluster: DataFrame, df_field: DataFrame, racol: str, deccol: str, minstars=200
+):
+    """Group stars in the cluster dataframe by their spatial location.
+    The grouping is done by creating concentric annuli around the center of the
+    cluster and dividing each annulus in regions with at least minstars stars.
+
+    Args:
+        df_cluster: DataFrame
+            DataFrame containing the cluster stars.
+        df_field: DataFrame
+            DataFrame containing the field stars.
+        racol: str
+            Name of the column containing the RA of the stars.
+        deccol: str
+            Name of the column containing the DEC of the stars.
+        minstars: int, optional
+            Minimum number of stars in each region. Default is 200.
+
+    Returns:
+        groups: list of DataFrame
+            List of DataFrames, each containing the stars in a region.
+        subfovs: list of Polygon
+            List of Polygons, each containing the area of a region.
+        fov: Polygon
+            Polygon containing the area of the instrument FoV.
+    """
 
     # Calculate the field star density and the min area for at least min stars
     ra_center = (
@@ -104,9 +138,36 @@ def spatial_groupby(df_cluster, df_field, racol, deccol, minstars=200):
     return groups, subfovs, fov
 
 
-def get_membership(cell_counts, cell_points, common_regions, iter=1000, fov_ratio=1.0):
+def get_membership(
+    cell_counts: list[tuple[int, int]],
+    cell_points: list[tuple[int, list[Point]]],
+    common_regions: list[int],
+    iter=1000,
+    fov_ratio=1.0,
+) -> np.ndarray:
+    """Get the membership of each stars thorugh iterative random extractions.
+
+    Args:
+        cell_counts: list of tuple(int, int)
+            List of tuples containing the region id and the number of field stars
+            in that region.
+        cell_points: list of tuple(int, list of Point)
+            List of tuples containing the region id and the list of Points
+            corresponding to the cluster stars in that region.
+        common_regions: list of int
+            List of region ids that are common between the field and cluster
+            stars.
+        iter: int, optional
+            Number of iterations to perform. Default is 1000.
+        fov_ratio: float, optional
+            Ratio between the instrument FoV and the sub-FoV area.
+            Default is 1.0.
+
+    Returns:
+        membership: np.ndarray
+            Array of shape (N, 2) containing the star index and its membership
+            probability.
     """
-    Get the membership of each stars thorugh iterative random extractions."""
 
     cell_counts_points = [
         (
@@ -161,24 +222,80 @@ def get_membership(cell_counts, cell_points, common_regions, iter=1000, fov_rati
 
 
 def do_statistical_membership(
-    df_cluster_input,
-    df_field_input,
-    field_mag_col,
-    dr_params,
-    member_threshold=0.8,
-    minstars=200,
-    racol="RA",
-    deccol="DEC",
-    process_iter=3,
-    min_star_per_cell=3,
-    memebership_iter=1000,
-    fov_ratio=1.0,
-    roi=None,
-    plot_dred=False,
-    plot_voronoi=False,
-    which_voronoi="dilation",
-    do_dilation=True,
-):
+    df_cluster_input: DataFrame,
+    df_field_input: DataFrame,
+    field_mag_col: list[str],
+    dr_params: dict[str, str],
+    member_threshold: float = 0.8,
+    minstars: int = 200,
+    racol: str = "RA",
+    deccol: str = "DEC",
+    process_iter: int = 3,
+    min_star_per_cell: int = 3,
+    membership_iter: int = 1000,
+    fov_ratio: float = 1.0,
+    roi: list[float] | None = None,
+    plot_dred: bool = False,
+    plot_voronoi: bool = False,
+    which_voronoi: str = "dilation",
+    do_dilation: bool = True,
+) -> DataFrame:
+    """Compute the statistical membership of stars in a cluster field.
+
+    Args:
+        df_cluster_input: DataFrame
+            DataFrame containing the cluster stars.
+        df_field_input: DataFrame
+            DataFrame containing the field stars.
+        field_mag_col: list of str
+            List containing the names of the columns with the magnitudes
+            to use for the CMD (color, mag).
+        dr_params: dict of str
+            Dictionary containing the names of the columns with the magnitudes
+            to use for the differential reddening correction.
+            Example: {"band1": "F606W", "band2": "F814W"}
+        member_threshold: float, optional
+            Membership threshold to consider a star as a member of the cluster.
+            Default is 0.8.
+        minstars: int, optional
+            Minimum number of stars in each region. Default is 200.
+        racol: str, optional
+            Name of the column containing the RA of the stars. Default is "RA".
+        deccol: str, optional
+            Name of the column containing the DEC of the stars. Default is "DEC".
+        process_iter: int, optional
+            Number of iterations to perform. Default is 3.
+        min_star_per_cell: int, optional
+            Minimum number of stars per Voronoi cell. Default is 3.
+        membership_iter: int, optional
+            Number of iterations to perform for the membership calculation.
+            Default is 1000.
+        fov_ratio: float, optional
+            Ratio between the instrument FoV and the sub-FoV area.
+            Default is 1.0.
+        roi: list of float or None, optional
+            List containing the vertices of a polygon to use as region of interest
+            for the differential reddening correction.
+            Example: [x1, y1, x2, y2, ..., xn, yn]
+            If None, no region of interest will be used. Default is None.
+        plot_dred: bool, optional
+            If True, plot the differential reddening correction results.
+            Default is False.
+        plot_voronoi: bool, optional
+            If True, plot the Voronoi grid used for the membership calculation.
+            Default is False.
+        which_voronoi: str, optional
+            Type of Voronoi grid to use. Options are "standard" and "dilation".
+            Default is "dilation".
+        do_dilation: bool, optional
+            If True, dilate the Voronoi regions to have at least min_star_per_cell
+            stars in each cell. Default is True.
+
+    Returns:
+        df_cluster: DataFrame
+            DataFrame containing the cluster stars with the membership and
+            differential reddening corrected magnitudes added.
+    """
     # make a copy to preserve the original dataframe
     df_cluster = df_cluster_input.copy()
     df_field = df_field_input.copy()
@@ -338,7 +455,7 @@ def do_statistical_membership(
                 cell_field_counts,
                 points_in_reigons,
                 common_regions,
-                memebership_iter,
+                membership_iter,
                 fovr,
             )
 

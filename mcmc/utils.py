@@ -11,24 +11,27 @@ def _bivar_norm_broadcasting_for_chain(
     sigma2: NDArray,
     rho: NDArray,
 ) -> NDArray:
-    """
-    Multivariate normal PDF (2D) with broadcasting for mcmc chain.
+    """Multivariate normal PDF (2D) with broadcasting for mcmc chain.
 
-    Parameters:
-        x1: NDArray
+    Args:
+        x1: `NDArray`
             First variable.
-        x2: NDArray
+        x2: `NDArray`
             Second variable.
-        mu1: NDArray
+        mu1: `NDArray`
             Mean of the first variable.
-        mu2: NDArray
+        mu2: `NDArray`
             Mean of the second variable.
-        sigma1: NDArray
+        sigma1: `NDArray`
             Standard deviation of the first variable.
-        sigma2: NDArray
+        sigma2: `NDArray`
             Standard deviation of the second variable.
-        rho: NDArray
+        rho: `NDArray`
             Correlation coefficient.
+
+    Returns:
+        PDF: `NDArray`
+            Probability density function values.
 
     """
     dx1 = x1[:, None] - mu1[None, :]  # (Ndata, Nchain)
@@ -49,26 +52,23 @@ def _bivar_norm_broadcasting_for_chain(
 def _generate_weighted_mvar_pdf(
     ch: NDArray, x1: NDArray, x2: NDArray, x1e: NDArray, x2e: NDArray
 ) -> NDArray:
-    """
-    Weighted bivariate normal PDF.
+    """Weighted bivariate normal PDF.
 
-    Parameters
-    ----------
-    ch : NDArray
-        Chain parameters (Nchain, 5).
-    x1 : NDArray
-        First observable (Ndata,).
-    x2 : NDArray
-        Second observable (Ndata,).
-    x1e : NDArray
-        First observable error (Ndata,).
-    x2e : NDArray
-        Second observable error (Ndata,).
+    Args:
+        ch: `NDArray`
+            Chain parameters (Nchain, 5).
+        x1: `NDArray`
+            First observable (Ndata,).
+        x2: `NDArray`
+            Second observable (Ndata,).
+        x1e: `NDArray`
+            First observable error (Ndata,).
+        x2e: `NDArray`
+            Second observable error (Ndata,).
 
-    Returns
-    -------
-    NDArray
-        Weighted bivariate normal PDF (Ndata, Nchain).
+    Returns:
+        `NDArray`
+            Weighted bivariate normal PDF (Ndata, Nchain).
     """
 
     mu1, mu2 = ch[:, 0], ch[:, 1]  # (Nchain,)
@@ -95,19 +95,18 @@ def get_component_membership_from_mcmc_chain(
     """Get component membership from MCMC chain.
 
     Parameters
-    ch : NDArray
-        Chain parameters.
-    data : NDArray
-        Observational data.
-    ncomp : int
-        Number of components.
-    par_per_comp : int
-        Number of parameters per component.
+        ch: `NDArray`
+            Chain parameters.
+        data: `NDArray`
+            Observational data.
+        ncomp: `int`
+            Number of components.
+        par_per_comp: `int`
+            Number of parameters per component.
 
-    Returns
-    -------
-    NDArray
-        Component membership.
+    Returns:
+        `NDArray`
+            Component membership.
     """
     x1, x2, x1e, x2e = data.T  # (Ndata,)
 

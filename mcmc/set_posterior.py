@@ -15,35 +15,33 @@ def posterior(
 ) -> float:
     """Posterior function for the MCMC.
 
-    Parameters
-    ----------
-    prm : `NDArray`
-        Parameters to fit.
-    data : `NDArray`
-        Data to fit.
-    qmin : `NDArray`
-        Lower limits for priors.
-    qmax : `NDArray`
-        Upper limits for priors.
-    component : `NDArray`
-        Number of components to fit.
-    pmodel : `str`, optional
-        Model to use for the posterior. Default is "bivariate_normal".
-        Currently, only "bivariate_normal" is supported.
-    fix_params : `NDArray` or `None`, optional
-        Array containing the fixed parameters.
-        If `None`, no parameters will be fixed. Defaul is `None`
-    lnk_params : `NDArray` or `None`, optional
-        Array containing the linked parameters.
-        If `None`, no parameters will be linked together.
-        Defaul is `None`
-    stride : `int`, optional
-        Number of parameters per component. Default is 5.
+    Args:
+        prm : `NDArray`
+            Parameters to fit.
+        data : `NDArray`
+            Data to fit.
+        qmin : `NDArray`
+            Lower limits for priors.
+        qmax : `NDArray`
+            Upper limits for priors.
+        component : `NDArray`
+            Number of components to fit.
+        pmodel : `str`, optional
+            Model to use for the posterior. Default is "bivariate_normal".
+            Currently, only "bivariate_normal" is supported.
+        fix_params : `NDArray` or `None`, optional
+            Array containing the fixed parameters.
+            If `None`, no parameters will be fixed. Defaul is `None`
+        lnk_params : `NDArray` or `None`, optional
+            Array containing the linked parameters.
+            If `None`, no parameters will be linked together.
+            Defaul is `None`
+        stride : `int`, optional
+            Number of parameters per component. Default is 5.
 
-    Returns
-    -------
-    `NDArray`
-        Logarithm of the posterior probability.
+    Returns:
+        output : `float`
+            Logarithm of the posterior probability.
     """
 
     if pmodel == "bivariate_normal":

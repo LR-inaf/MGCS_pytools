@@ -1,4 +1,6 @@
+from typing import Tuple
 import numpy as np
+from numpy.typing import NDArray
 import sys
 from scipy.spatial import Voronoi
 from scipy.interpolate import RegularGridInterpolator
@@ -12,8 +14,25 @@ from shapely import (
 
 from .region_tools import get_regions_count, get_pts_in_regions
 
+"""
+This code is adapted from 
+https://stackoverflow.com/questions/28665491/getting-a-bounded-polygon-coordinates-from-voronoi-cells
+"""
 
-def _bounded_vor(points, bounding_box):
+
+def _bounded_vor(points: NDArray, bounding_box: NDArray) -> Voronoi:
+    """Compute bounded Voronoi tessellation.
+
+    Args:
+        points: `NDArray`
+            Points to compute the Voronoi tessellation (Npoints, 2).
+        bounding_box: `NDArray`
+            Bounding box to limit the Voronoi tessellation (xmin, xmax, ymin, ymax).
+
+    Returns:
+        vor: `Voronoi`
+            Bounded Voronoi tessellation.
+    """
     eps = sys.float_info.epsilon
 
     # Mirror points
@@ -64,7 +83,17 @@ def _bounded_vor(points, bounding_box):
     return vor
 
 
-def _centroid_region(vertices):
+def _centroid_region(vertices: NDArray) -> NDArray:
+    """Compute centroid of a polygon.
+
+    Args:
+        vertices: `NDArray`
+            Vertices of the polygon (Nvertices, 2).
+
+    Returns:
+        centroid: `NDArray`
+            Centroid of the polygon (1, 2).
+    """
     # Polygon's signed area
     A = 0
 
@@ -85,7 +114,27 @@ def _centroid_region(vertices):
     return np.array([[C_x, C_y]])
 
 
-def _cvt_vor(init_points, iters, padx=0.01, pady=0.01):
+def _cvt_vor(
+    init_points: NDArray, iters: int, padx: float = 0.01, pady: float = 0.01
+) -> Tuple[Voronoi, NDArray]:
+    """Compute Centroidal Voronoi Tessellation (CVT).
+
+    Args:
+        init_points: `NDArray`
+            Initial points to compute the CVT (Npoints, 2).
+        iters: `int`
+            Number of iterations to compute the CVT.
+        padx: `float`, optional
+            Padding in x direction to limit the Voronoi tessellation. Default is 0.01.
+        pady: `float`, optional
+            Padding in y direction to limit the Voronoi tessellation. Default is 0.01.
+
+    Returns:
+        vor: `Voronoi`
+            Centroidal Voronoi tessellation.
+        centroids: `NDArray`
+            Centroids of the Voronoi cells (Ncells, 2).
+    """
     points = init_points
 
     for i in range(iters):
@@ -112,7 +161,17 @@ def _cvt_vor(init_points, iters, padx=0.01, pady=0.01):
     return vor, np.array(centroids)
 
 
-def _aggregate_regions(regions):
+def _aggregate_regions(regions: NDArray) -> NDArray:
+    """Aggregate regions into joint regions.
+
+    Args:
+        regions: `NDArray`
+            Array of regions (Nregions, 2).
+
+    Returns:
+        joint_regions: `NDArray`
+            Array of joint regions (Njoint_regions, 2).
+    """
 
     joint_regions = []
 
@@ -148,7 +207,24 @@ def _aggregate_regions(regions):
     return np.array(joint_regions)
 
 
-def _dilate_grid(regions, points, target_median):
+def _dilate_grid(regions: NDArray, points: NDArray, target_median: float) -> NDArray:
+    """Grid dilation.
+
+    Dilate the grid by aggregating regions
+    until a target median number of points per region is reached.
+
+    Args:
+        regions: `NDArray`
+            Array of regions (Nregions, 2).
+        points: `NDArray`
+            Array of points (Npoints, 2).
+        target_median: `float`
+            Target median number of points per region.
+
+    Returns:
+        joint_regions: `NDArray`
+            Array of joint regions (Njoint_regions, 2).
+    """
 
     joint_regions = np.array(regions)
 
@@ -159,20 +235,28 @@ def _dilate_grid(regions, points, target_median):
         if np.median(pts_in_regions[:, 1]) >= target_median:
             break
         c += 1
-        print(c)
+        # print(c)
 
     return joint_regions
 
 
-def generate_weights(XY):
-    #       compute 2d map to evaluate weights
+def generate_weights(XY: NDArray) -> NDArray:
+    """Generate weights for points based on their density.
+    Args:
+        XY: `NDArray`
+            Array of points (Npoints, 2).
+    Returns:
+        weights: `NDArray`
+            Weights for each point (Npoints,).
+    """
+    # compute 2d map to evaluate weights
     hist, xedges, yedges = np.histogram2d(
         x=XY[:, 0], y=XY[:, 1], bins=200, density=True
     )
     xedges = 0.5 * (xedges[1:] + xedges[:-1])
     yedges = 0.5 * (yedges[1:] + yedges[:-1])
 
-    # 	interpolate the grid
+    # interpolate the grid
     interp = RegularGridInterpolator(
         (xedges, yedges), hist, bounds_error=False, fill_value=np.nan
     )  # from scipy
@@ -180,7 +264,31 @@ def generate_weights(XY):
     return weights
 
 
-def generate_centroids(pos, points_per_bin=None, nbins=None, weights=None):
+def generate_centroids(
+    pos: NDArray,
+    points_per_bin: int | None = None,
+    nbins: int | None = None,
+    weights: NDArray | None = None,
+):
+    """Generate centroids using weighted k-means clustering.
+
+    Args:
+        pos: `NDArray`
+            Array of points (Npoints, 2).
+        points_per_bin: `int` or `None`, optional
+            Target number of points per bin. If `None`, `nbins` must be specified.
+            Default is `None`.
+        nbins: `int` or `None`, optional
+            Number of bins to generate. If `None`, `points_per_bin` must be specified.
+            Default is `None`.
+        weights: `NDArray` or `None`, optional
+            Weights for each point (Npoints,). If `None`, no weights are used.
+            Default is `None`.
+
+    Returns:
+        centroids: `NDArray`
+            Array of centroids (Ncentroids, 2).
+    """
     if points_per_bin is None and nbins is None:
         raise ValueError("points_per_bin or nbins must be specificied")
 
@@ -212,14 +320,35 @@ def generate_centroids(pos, points_per_bin=None, nbins=None, weights=None):
 class cvtGrid:
     def __init__(
         self,
-        points,
-        which="dilation",
-        iter=3,
-        padx=0.01,
-        pady=0.01,
-        dilate=False,
-        target_median=3,
+        points: NDArray,
+        which: str = "dilation",
+        iter: int = 3,
+        padx: float = 0.01,
+        pady: float = 0.01,
+        dilate: bool = False,
+        target_median: int = 3,
     ):
+        """Compute Centroidal Voronoi Tessellation (CVT) grid.
+
+        Args:
+            points: `NDArray`
+                Points to compute the CVT (Npoints, 2).
+            which: `str`, optional
+                Method to compute the CVT. Options are "dilation" or "wkmeans".
+                Default is "dilation".
+            iter: `int`, optional
+                Number of iterations to compute the CVT. Default is 3.
+            padx: `float`, optional
+                Padding in x direction to limit the Voronoi tessellation. Default is 0.01.
+            pady: `float`, optional
+                Padding in y direction to limit the Voronoi tessellation. Default is 0.01.
+            dilate: `bool`, optional
+                Whether to dilate the grid by aggregating regions until a target median
+                number of points per region is reached. Default is False.
+            target_median: `int`, optional
+                Target median number of points per region when dilating the grid.
+                Default is 3.
+        """
         if which == "dilation":
             self.cvor, self.cpoints = _cvt_vor(points, iter, padx, pady)
 

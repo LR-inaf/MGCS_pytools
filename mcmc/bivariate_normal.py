@@ -1,4 +1,3 @@
-from matplotlib.pylab import det
 import numpy as np
 from numpy.typing import NDArray
 
@@ -14,7 +13,7 @@ def bivar_norm(
 ) -> NDArray:
     """Bivariate normal distribution
 
-    Parameters:
+    Args:
         x1: NDArray
             First variable.
         x2: NDArray
@@ -49,7 +48,25 @@ def bivar_norm(
     return norm * np.exp(-z)
 
 
-def _logl(data, prm, component, stride=5):
+def _logl(data: NDArray, prm: NDArray, component: int, stride: int = 5):
+    """Log-likelihood function for a mixture of bivariate normal distributions.
+
+    Args:
+        data: NDArray
+            Data array with shape (N, 4), where each row is (pm_ra, pm_dec, epm_ra, epm_dec).
+        prm: NDArray
+            Parameter array containing the parameters for each component and weights.
+            For each component, the parameters are (mu1, mu2, sigma1, sigma2, rho).
+            If there are multiple components, the last (component - 1) elements are weights.
+        component: int
+            Number of bivariate normal components in the mixture.
+        stride: int, optional
+            Number of parameters per component. Default is 5.
+
+    Returns:
+        log_likelihood: float
+            The log-likelihood value.
+    """
 
     #   unpack data
     pm_ra = data[:, 0]
@@ -87,16 +104,34 @@ def _logl(data, prm, component, stride=5):
                 pm_ra, pm_dec, mu1, mu2, sigma1_obs, sigma2_obs, rho_eff
             )
 
-    # print(c_dist.shape)
     if np.any(np.isnan(np.log(c_dist))):
         print(c_dist)
-        print("crashing parameters:", prm)
+        print("crashing Args:", prm)
         return np.nan
 
     return np.log(c_dist).sum()
 
 
-def _lnprior(prm, qmin, qmax, ncomp) -> float:
+def _lnprior(prm: NDArray, qmin: NDArray, qmax: NDArray, ncomp: int) -> float:
+    """Log-prior function for the parameters.
+
+    Args:
+        prm: NDArray
+            Parameter array containing the parameters for each component and weights.
+            For each component, the parameters are (mu1, mu2, sigma1, sigma2, rho).
+            If there are multiple components, the last (component - 1) elements are weights.
+        qmin: NDArray
+            Minimum values for each parameter.
+        qmax: NDArray
+            Maximum values for each parameter.
+        ncomp: int
+            Number of bivariate normal components in the mixture.
+
+    Returns:
+        log_prior: float
+            The log-prior value.
+    """
+
     if ncomp > 1:
         ws = prm[-(ncomp - 1) :]
         if (prm < qmin).any() or (prm > qmax).any() or 1 - ws.sum() < 0.0:
