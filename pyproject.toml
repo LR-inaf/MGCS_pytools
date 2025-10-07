@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "MGCS_pytools"
-version = "0.1.1"
+version = "0.1.2"
 description = "A collection of Python tools for data analysis and visualization made for the MGCS HST Treasury program."
 readme = "README.md"
 license = "MIT"

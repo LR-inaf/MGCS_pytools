@@ -1,6 +1,6 @@
 Metadata-Version: 2.4
 Name: MGCS_pytools
-Version: 0.1.1
+Version: 0.1.2
 Summary: A collection of Python tools for data analysis and visualization made for the MGCS HST Treasury program.
 Author-email: Luca Rosignoli <luca.rosignoli@inaf.it>
 License-Expression: MIT
