@@ -22,10 +22,7 @@ from .dr_correction import compute_differential_reddening
 from .cvt_grid import cvtGrid
 from .region_tools import get_regions_count, get_pts_in_regions
 
-import sys
-
-# sys.path.append("..")  # add parent directory to path
-from ..mcmc.utils import plotting as utplot
+from mgcs_pytools.utils import plotting as utplot
 
 #
 #
@@ -336,7 +333,9 @@ def do_statistical_membership(
     df_cluster["delta_ebv"] = 0.0
     df_cluster["membership"] = 1.0
 
-    for it in range(process_iter):
+    it = 0
+    # for it in range(process_iter):
+    while True:
         print(f"ITERATION {it+1}")
 
         # reddening differential correction
@@ -357,6 +356,7 @@ def do_statistical_membership(
             roi=roi,
             plot=plot_dred,
         )
+
         roi = poli
         df_cluster[dr_band1_corr] = b1_corr
         df_cluster[dr_band2_corr] = b2_corr
@@ -365,18 +365,17 @@ def do_statistical_membership(
         if plot_dred:
             # plot new cmd
             _, ax = plt.subplots(layout="constrained")
+
             utplot.plot_cmd(
+                df_cluster[dr_band1_corr],
+                df_cluster[dr_band2_corr],
                 ax,
-                df_cluster,
-                [dr_band1_corr, dr_band2_corr],
-                color="black",
-                inverty=True,
             )
-            ax.set(xlim=(0.5, 3.5), ylim=(26.5, 14))
+            # ax.set(xlim=(0.5, 3.5), ylim=(26.5, 14))
 
             # plot reddening map
             _ = utplot.plot_reddening_map(
-                df_cluster["ra(1)"],
+                df_cluster[racol],
                 df_cluster[deccol],
                 ra_center,
                 dec_center,
@@ -387,9 +386,23 @@ def do_statistical_membership(
             plt.pause(1.0)
 
         print("...differential reddening completed")
-        print(f"EBV stat: {EBV.mean():.4f}, {EBV.min():.4f}, {EBV.max():.4f}")
+        print(
+            f"EBV stat (mean, min, max): {np.median(EBV):.6f}, {EBV.min():.6f}, {EBV.max():.6f}"
+        )
+        # _, ax = plt.subplots()
+        # ax.hist(EBV, bins=30, color="gray", edgecolor="black", density=True)
+        # plt.show()
+        print("number of stars with null ebv: ", np.sum(EBV == 0.0) / EBV.shape[0])
+        photometric_error = np.median(
+            (
+                df_cluster[dr_params["band1_error"]] ** 2
+                + df_cluster[dr_params["band2_error"]] ** 2
+            )
+            ** 0.5
+        )
+        print(f"Mean photometric error: {photometric_error:.6f}")
 
-        print("Start decontamionation process..")
+        print("Start decontamination process..")
         for i, (group, fovr) in enumerate(zip(groups, fov_ratio)):
 
             # updating the membership of the groups
@@ -469,5 +482,10 @@ def do_statistical_membership(
             df_cluster.loc[cluster_ids[membership[:, 0].astype(int)], "membership"] = (
                 membership[:, 1]
             )
+
+        if abs(np.median(EBV)) < abs(photometric_error) and it > 0:
+            print("Differential reddening converged, stopping iterations.")
+            break
+        it += 1
 
     return df_cluster
