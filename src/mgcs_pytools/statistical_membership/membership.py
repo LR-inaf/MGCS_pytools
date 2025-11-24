@@ -223,6 +223,7 @@ def do_statistical_membership(
     df_field_input: DataFrame,
     field_mag_col: list[str],
     dr_params: dict[str, str],
+    parallel_fov: float,
     member_threshold: float = 0.8,
     minstars: int = 200,
     racol: str = "RA",
@@ -230,7 +231,7 @@ def do_statistical_membership(
     process_iter: int = 3,
     min_star_per_cell: int = 3,
     membership_iter: int = 1000,
-    fov_ratio: float = 1.0,
+    # fov_ratio: float = 1.0,
     roi: list[float] | None = None,
     plot_dred: bool = False,
     plot_voronoi: bool = False,
@@ -251,6 +252,8 @@ def do_statistical_membership(
             Dictionary containing the names of the columns with the magnitudes
             to use for the differential reddening correction.
             Example: {"band1": "F606W", "band2": "F814W"}
+        parallel_fov: float
+            Size of the parallel FoV in deg square.
         member_threshold: float, optional
             Membership threshold to consider a star as a member of the cluster.
             Default is 0.8.
@@ -314,7 +317,7 @@ def do_statistical_membership(
         + (df_cluster[deccol].max() - df_cluster[deccol].min()) / 2
     )
 
-    fov_ratio = [subfov.area / instrument_fov.area for subfov in subfovs]
+    fov_ratio = [subfov.area / parallel_fov for subfov in subfovs]
 
     field_pts = [
         Point(row[field_mag_col[0]] - row[field_mag_col[1]], row[field_mag_col[0]])
