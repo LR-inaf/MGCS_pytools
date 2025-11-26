@@ -195,6 +195,18 @@ def _aggregate_regions(regions: NDArray) -> NDArray:
             np.where(np.isin(new_touched_regions, old_touched_regions)),
         )
 
+        # discard too large cells, most likely to be a field one
+        mask = np.where(
+            [
+                regions[idx].area > 10.0 * reg.area for idx in new_touched_regions
+            ]  # to understand if it is better 5 or 10
+        )
+        new_touched_regions = (
+            np.delete(new_touched_regions, mask[0])
+            if len(mask[0]) > 0
+            else new_touched_regions
+        )
+
         old_touched_regions = np.append(old_touched_regions, new_touched_regions)
         old_touched_regions = np.append(old_touched_regions, i)
 

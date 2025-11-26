@@ -100,15 +100,6 @@ class createROI:
         self.cid_KEYBOARD = self.ax.figure.canvas.mpl_connect("key_press_event", self)
 
 
-# params needed:
-# rband1[float], exctiction law in band1
-# rband2[float], exctiction law in band2
-# RA[str], RA colname
-# DEC[str], DEC colname
-# TO_mag[float], Turn off mag
-# TO_color[float], Turn off color
-# nref[int], number of neighbors stars used as reference
-# columns[dict[str]] columns name of the dataframe [X, Y, V, I, membership]
 def compute_differential_reddening(
     df: pd.DataFrame,
     params: dict,

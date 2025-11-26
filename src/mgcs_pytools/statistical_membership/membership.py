@@ -221,6 +221,8 @@ def get_membership(
 def do_statistical_membership(
     df_cluster_input: DataFrame,
     df_field_input: DataFrame,
+    target_mag_col: list[str],
+    target_mag_col_error: list[str],
     field_mag_col: list[str],
     dr_params: dict[str, str],
     parallel_fov: float,
@@ -228,10 +230,9 @@ def do_statistical_membership(
     minstars: int = 200,
     racol: str = "RA",
     deccol: str = "DEC",
-    process_iter: int = 3,
+    # process_iter: int = 3,
     min_star_per_cell: int = 3,
     membership_iter: int = 1000,
-    # fov_ratio: float = 1.0,
     roi: list[float] | None = None,
     plot_dred: bool = False,
     plot_voronoi: bool = False,
@@ -245,13 +246,26 @@ def do_statistical_membership(
             DataFrame containing the cluster stars.
         df_field_input: DataFrame
             DataFrame containing the field stars.
+        target_mag_col: list of str
+            List containing the names of the columns with the magnitudes
+            to use for the target CMD (color, mag).
+        target_mag_col_error: list of str
+            List containing the names of the columns with the magnitude errors
+            to use for the target CMD (color, mag).
         field_mag_col: list of str
             List containing the names of the columns with the magnitudes
-            to use for the CMD (color, mag).
+            to use for the field CMD (color, mag).
         dr_params: dict of str
-            Dictionary containing the names of the columns with the magnitudes
-            to use for the differential reddening correction.
-            Example: {"band1": "F606W", "band2": "F814W"}
+            Dictionary containing inputs parameters for the differential reddening
+            correction. It must contain the following keys:
+            - 'rband1': the exction value in band1,
+            - 'rband2': the exction value in band2,
+            - 'TO_mag': the magnitude of the Turn-off,
+            - 'TO_color': the color of the Turn-off,
+            - 'nref': the number of reference stars,
+            - 'xcol': the name of the column containing the x coordinates,
+            - 'ycol': the name of the column containing the y coordinates,
+            - 'ord_step': the bin size in the 'ordinate' to calculate the ridge line
         parallel_fov: float
             Size of the parallel FoV in deg square.
         member_threshold: float, optional
@@ -263,8 +277,6 @@ def do_statistical_membership(
             Name of the column containing the RA of the stars. Default is "RA".
         deccol: str, optional
             Name of the column containing the DEC of the stars. Default is "DEC".
-        process_iter: int, optional
-            Number of iterations to perform. Default is 3.
         min_star_per_cell: int, optional
             Minimum number of stars per Voronoi cell. Default is 3.
         membership_iter: int, optional
@@ -325,13 +337,16 @@ def do_statistical_membership(
     ]
 
     # initialize the cluster columns for membership and differential reddening
-    dr_band1_corr = dr_params["band1"] + "_drcorr"
-    dr_band2_corr = dr_params["band2"] + "_drcorr"
-    df_cluster[dr_band1_corr] = df_cluster[dr_params["band1"]]
-    df_cluster[dr_band2_corr] = df_cluster[dr_params["band2"]]
+    dr_band1_corr = target_mag_col[0] + "_drcorr"
+    dr_band2_corr = target_mag_col[1] + "_drcorr"
+    df_cluster[dr_band1_corr] = df_cluster[target_mag_col[0]]
+    df_cluster[dr_band2_corr] = df_cluster[target_mag_col[1]]
 
     dr_params["band1"] = dr_band1_corr
     dr_params["band2"] = dr_band2_corr
+
+    dr_params["xcol"] = racol
+    dr_params["ycol"] = deccol
 
     df_cluster["delta_ebv"] = 0.0
     df_cluster["membership"] = 1.0
@@ -398,8 +413,8 @@ def do_statistical_membership(
         print("number of stars with null ebv: ", np.sum(EBV == 0.0) / EBV.shape[0])
         photometric_error = np.median(
             (
-                df_cluster[dr_params["band1_error"]] ** 2
-                + df_cluster[dr_params["band2_error"]] ** 2
+                df_cluster[target_mag_col_error[0]] ** 2
+                + df_cluster[target_mag_col_error[1]] ** 2
             )
             ** 0.5
         )
