@@ -3,6 +3,7 @@ import matplotlib.pyplot as plt
 import matplotlib.cm as cm
 from matplotlib.ticker import MultipleLocator
 from mpl_toolkits.axes_grid1.inset_locator import inset_axes
+from matplotlib.gridspec import GridSpec
 
 from scipy.spatial import voronoi_plot_2d, Voronoi
 from scipy.stats import norm
@@ -678,25 +679,24 @@ def plot_vpd_and_mdist_component(
     vpd_xlabel=None,
     vpd_ylabel=None,
     figsize_inches=8,
-    wspace=0.05,
-    hspace=0.05,
     figsize_wadjust=0.0,
     figsize_hadjust=-0.6,
     xlim=None,
     ylim=None,
     membership_cmap="coolwarm",
+    component_colors=None,
     hist_scale="log",
 ):
 
-    layout = [("histx", "."), ("vpd", "histy")]
-    fig, axs_dict = plt.subplot_mosaic(
-        layout,
-        figsize=(figsize_inches + figsize_wadjust, figsize_inches + figsize_hadjust),
-        width_ratios=[1, 0.3],
-        height_ratios=[0.3, 1],
-        gridspec_kw={"wspace": wspace, "hspace": hspace},
-        layout="compressed",
+    fig = plt.figure(
+        figsize=(figsize_inches + figsize_wadjust, figsize_inches + figsize_hadjust)
     )
+    gs = GridSpec(4, 4, wspace=0, hspace=0)
+
+    ax_scatter = fig.add_subplot(gs[1:4, 0:3])
+    ax_hist_x = fig.add_subplot(gs[0, 0:3])  # sharex=ax_scatter)
+    ax_hist_y = fig.add_subplot(gs[1:4, 3])  # sharey=ax_scatter)
+    axs_dict = {"vpd": ax_scatter, "histx": ax_hist_x, "histy": ax_hist_y}
 
     capsize = 1.5
     ms = 15
@@ -766,8 +766,11 @@ def plot_vpd_and_mdist_component(
     if ylim is not None:
         axs_dict["vpd"].set(ylim=ylim)
 
-    cmap = mpl.colormaps["Set1"]
-    component_colors = [cmap(i) for i in range(ncomp)]
+    if component_colors is None:
+        cmap = mpl.colormaps["Set1"]
+        component_colors = [cmap(i) for i in range(ncomp)]
+    else:
+        assert len(component_colors) == ncomp, "Component colors length mismatch."
 
     # Mdist
     mdist_x_sum = None
