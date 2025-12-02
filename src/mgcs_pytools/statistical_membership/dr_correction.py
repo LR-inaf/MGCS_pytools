@@ -31,6 +31,20 @@ class createROI:
 
         # make plot
         self.ax.scatter(self.points[:, 0], self.points[:, 1], marker=".", s=0.5, lw=0.1)
+        self.ax.set(
+            xlabel="abscissa",
+            ylabel="ordinate",
+            title="CMD in the abscissa-ordinate plane",
+        )
+        self.ax.text(
+            0.05,
+            0.95,
+            "Left click: add vertex\nSpacebar: close polygon\nC: cancel polygon\nQ: quit",
+            transform=self.ax.transAxes,
+            fontsize=8,
+            verticalalignment="top",
+            bbox=dict(boxstyle="round", facecolor="wheat", alpha=0.5),
+        )
         self.fig.canvas.draw()
         plt.show()
 
@@ -84,6 +98,22 @@ class createROI:
                 lw=0.5,
                 zorder=3,
             )
+
+            self.ax.set(
+                xlabel="abscissa",
+                ylabel="ordinate",
+                title="CMD in the abscissa-ordinate plane",
+            )
+            self.ax.text(
+                0.05,
+                0.95,
+                "Left click: add vertex\nSpacebar: close polygon\nC: cancel polygon\nQ: quit",
+                transform=self.ax.transAxes,
+                fontsize=8,
+                verticalalignment="top",
+                bbox=dict(boxstyle="round", facecolor="wheat", alpha=0.5),
+            )
+
             self.fig.canvas.draw()
             self.fig.canvas.flush_events()
 

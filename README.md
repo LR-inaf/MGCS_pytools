@@ -11,7 +11,7 @@ This package provides three modules:
 
 Further details on the code and it performance on real data will be published in an upcoming paper(s).
 
-You can find some boilerplates in the _test_ folder.
+You can find a boilerplate in the main folder.
 
 ## Contributing
 __!!Contributions are super welcome!!__

@@ -20,4 +20,3 @@ src/mgcs_pytools/statistical_membership/membership.py
 src/mgcs_pytools/statistical_membership/region_tools.py
 src/mgcs_pytools/utils/__init__.py
 src/mgcs_pytools/utils/plotting.py
-test/test.py

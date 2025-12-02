@@ -352,18 +352,19 @@ def do_statistical_membership(
     df_cluster["membership"] = 1.0
 
     it = 0
+    it_stop = None
     # for it in range(process_iter):
     while True:
         print(f"ITERATION {it+1}")
 
         # reddening differential correction
-        print("compute differential reddening..")
-        print(df_cluster["membership"].describe())
+        print("Compute differential reddening..")
+        # print(df_cluster["membership"].describe())
         if it == 0:
             print("First iteration, correction threshold skipped")
             calc_corr_threhsold = False
         else:
-            print(f"do calcuation of the Correction threshold")
+            print(f"Do calculation of the correction threshold")
             calc_corr_threhsold = True
 
         b1_corr, b2_corr, EBV, poli = compute_differential_reddening(
@@ -410,7 +411,10 @@ def do_statistical_membership(
         # _, ax = plt.subplots()
         # ax.hist(EBV, bins=30, color="gray", edgecolor="black", density=True)
         # plt.show()
-        print("number of stars with null ebv: ", np.sum(EBV == 0.0) / EBV.shape[0])
+        print(
+            f"Number of stars with null ebv: {np.sum(EBV == 0.0) / EBV.shape[0] * 100:.2f}%"
+            f" ({np.sum(EBV == 0.0)} over {EBV.shape[0]})"
+        )
         photometric_error = np.median(
             (
                 df_cluster[target_mag_col_error[0]] ** 2
@@ -501,9 +505,14 @@ def do_statistical_membership(
                 membership[:, 1]
             )
 
+        if it == it_stop:
+            break
+
         if abs(np.median(EBV)) < abs(photometric_error) and it > 0:
             print("Differential reddening converged, stopping iterations.")
-            break
+            print("Next iteration will be the last one.")
+            it_stop = it + 1
+
         it += 1
 
     return df_cluster
