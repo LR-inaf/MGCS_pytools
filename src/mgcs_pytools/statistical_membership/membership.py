@@ -116,7 +116,7 @@ def spatial_groupby(
             intersection(difference(subfov, subfovs[-1]), fov).area
             > min_area / area_conversion
         ):
-            pol = intersection(difference(subfov, subfovs[-1]), fov)
+            intersection(difference(subfov, subfovs[-1]), fov)
             subfovs.append(subfov)
         r += dr
 
@@ -361,16 +361,16 @@ def do_statistical_membership(
         # print(df_cluster["membership"].describe())
         if it == 0:
             print("First iteration, correction threshold skipped")
-            calc_corr_threhsold = False
+            calc_correction_threshold = False
         else:
             print("Do calculation of the correction threshold")
-            calc_corr_threhsold = True
+            calc_correction_threshold = True
 
         b1_corr, b2_corr, EBV, poli = compute_differential_reddening(
             df_cluster,
             params=dr_params,
             member_threshold=member_threshold,
-            calc_corr_threhsold=calc_corr_threhsold,
+            calc_correction_threshold=calc_correction_threshold,
             roi=roi,
             plot=plot_dred,
         )
