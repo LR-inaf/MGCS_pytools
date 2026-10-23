@@ -41,11 +41,9 @@ def bivariate_normal_pdf(
     det = sigma1 * sigma2 * np.sqrt(1 - rho**2)
     norm = 1.0 / (2.0 * np.pi * det)
 
-    z = (
-        (dx1 / sigma1) ** 2
-        + (dx2 / sigma2) ** 2
-        - 2 * rho * dx1 * dx2 / (sigma1 * sigma2)
-    ) / (2 * (1 - rho**2))
+    z = ((dx1 / sigma1) ** 2 + (dx2 / sigma2) ** 2 - 2 * rho * dx1 * dx2 / (sigma1 * sigma2)) / (
+        2 * (1 - rho**2)
+    )
 
     return norm * np.exp(-z)
 

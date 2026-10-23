@@ -1,7 +1,8 @@
 import numpy as np
-from mgcs_pytools.mcmc.bivariate_normal import bivariate_normal_pdf, _logl, _lnprior
-from mgcs_pytools.mcmc.set_posterior import posterior
+
+from mgcs_pytools.mcmc.bivariate_normal import _lnprior, _logl, bivariate_normal_pdf
 from mgcs_pytools.mcmc.mcmc import MCMCEnsembleSampler
+from mgcs_pytools.mcmc.set_posterior import posterior
 
 
 def test_bivariate_normal_pdf():
@@ -90,3 +91,40 @@ def test_posterior_fixed_linked():
     # Now evaluating with prm=[0,0,1.5,1.5,0] vs not linked [0,0,1.5,1.0,0]
     p_val5 = posterior(prm_diff, data, qmin, qmax, component=1)
     assert p_val4 != p_val5
+
+
+def test_component_membership_chain_calculation():
+    from mgcs_pytools.mcmc.utils import get_component_membership_from_mcmc_chain
+
+    np.random.seed(42)
+    # mock chain: 20 iterations, 2 components: 5 params each + 1 weight = 11 params
+    ch = np.zeros((20, 11))
+    ch[:, 0] = 0.0  # mu1_c1
+    ch[:, 1] = 0.0  # mu2_c1
+    ch[:, 2] = 0.5  # s1_c1
+    ch[:, 3] = 0.5  # s2_c1
+    ch[:, 4] = 0.0  # rho_c1
+
+    ch[:, 5] = 2.0  # mu1_c2
+    ch[:, 6] = 2.0  # mu2_c2
+    ch[:, 7] = 1.0  # s1_c2
+    ch[:, 8] = 1.0  # s2_c2
+    ch[:, 9] = 0.0  # rho_c2
+
+    ch[:, 10] = 0.5  # weight component 1
+
+    # Star 1 at (0, 0) should be mostly component 0
+    # Star 2 at (2, 2) should be mostly component 1
+    data = np.array(
+        [
+            [0.0, 0.0, 0.05, 0.05],
+            [2.0, 2.0, 0.05, 0.05],
+        ]
+    )
+
+    mem = get_component_membership_from_mcmc_chain(ch, data, ncomp=2, par_per_comp=5, batch_size=10)
+    assert mem.shape == (2, 2)
+    assert mem[0, 0] > 0.8  # Star 1 in comp 0
+    assert mem[1, 1] > 0.8  # Star 2 in comp 1
+    # Probabilities should sum to 1.0 per star
+    np.testing.assert_allclose(np.sum(mem, axis=0), [1.0, 1.0], atol=1e-5)

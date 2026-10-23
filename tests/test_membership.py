@@ -1,10 +1,12 @@
 from unittest.mock import patch
-import pytest
+
 import numpy as np
 import pandas as pd
+import pytest
+
 from mgcs_pytools.statistical_membership import (
-    spatial_groupby,
     compute_statistical_membership,
+    spatial_groupby,
 )
 from mgcs_pytools.statistical_membership.membership import get_membership
 
@@ -58,8 +60,6 @@ def test_get_membership_analytical_and_montecarlo():
     assert np.all((mem_mc[:, 1] >= 0.0) & (mem_mc[:, 1] <= 1.0))
     # MC should be roughly around the analytical value
     assert np.abs(np.mean(mem_mc[:10, 1]) - 0.5) < 0.2
-
-
 
 
 def test_compute_statistical_membership():

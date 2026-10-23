@@ -1,18 +1,16 @@
+from typing import Any
+
 import matplotlib as mpl
-import matplotlib.pyplot as plt
 import matplotlib.cm as cm
+import matplotlib.pyplot as plt
+import numpy as np
+from corner import corner
+from matplotlib.gridspec import GridSpec
 from matplotlib.ticker import MultipleLocator
 from mpl_toolkits.axes_grid1.inset_locator import inset_axes
-from matplotlib.gridspec import GridSpec
-
-from scipy.spatial import voronoi_plot_2d, Voronoi
-
-import numpy as np
 from numpy.typing import NDArray
-
-from shapely import plotting, Polygon
-
-from corner import corner
+from scipy.spatial import Voronoi, voronoi_plot_2d
+from shapely import Polygon, plotting
 
 
 ########################
@@ -23,7 +21,7 @@ def plot_cmd(
     ax: mpl.axes.Axes | None = None,
     ms: int = 1,
     lw: float = 0.3,
-    color: str = "black",
+    color: Any = "black",
     cmap: str | None = None,
     alpha: float = 0.3,
     inverty: bool = True,
@@ -75,7 +73,9 @@ def plot_cmd(
 
     ax.set(**kwargs)
 
-    return ax.get_figure()
+    fig = ax.get_figure()
+    assert isinstance(fig, mpl.figure.Figure)
+    return fig
 
 
 def plot_membership_overview(
@@ -84,13 +84,13 @@ def plot_membership_overview(
     bfield: NDArray,
     vfield: NDArray,
     membership: NDArray,
-    blabel: str = "$m_{\mathrm{B}}$",
-    vlabel: str = "$m_{\mathrm{V}}$",
-    xlim: tuple[float, float] = None,
-    ylim: tuple[float, float] = None,
+    blabel: str = r"$m_{\mathrm{B}}$",
+    vlabel: str = r"$m_{\mathrm{V}}$",
+    xlim: tuple[float, float] | None = None,
+    ylim: tuple[float, float] | None = None,
     cmd_cmap: str = "coolwarm",
 ) -> mpl.figure.Figure:
-    """Plot an overview of membership in the CMD space.
+    r"""Plot an overview of membership in the CMD space.
     Parameters:
         btarget: `NDArray`
             Magnitudes in band B for the target
@@ -133,9 +133,7 @@ def plot_membership_overview(
     ax_cmd_fl.set(xlim=ax_cmd_tg.get_xlim(), ylim=ax_cmd_tg.get_ylim())
 
     plot_cmd(btarget, vtarget, ax_cmd_tg_memb, color=membership, cmap=cmd_cmap)
-    ax_cmd_tg_memb.set(
-        title="Target with membership", xlabel=f"{blabel} - {vlabel}", ylabel=blabel
-    )
+    ax_cmd_tg_memb.set(title="Target with membership", xlabel=f"{blabel} - {vlabel}", ylabel=blabel)
     ax_cmd_tg_memb.set(xlim=ax_cmd_tg.get_xlim(), ylim=ax_cmd_tg.get_ylim())
 
     _ = ax_cmd_tg_memb.figure.colorbar(
@@ -149,17 +147,13 @@ def plot_membership_overview(
     )
 
     ax_memb_dist.hist(membership, bins=30, density=True, align="mid")
-    ax_memb_dist.set(
-        title="Membership distribution", xlabel="Membership", ylabel="Density"
-    )
+    ax_memb_dist.set(title="Membership distribution", xlabel="Membership", ylabel="Density")
 
     p = np.percentile(
         membership,
         [16, 50, 84],
     )
-    ax_memb_dist.axvline(
-        p[0], color="red", linestyle="--", label=f"{p[0]:.2f}: 16th percentile"
-    )
+    ax_memb_dist.axvline(p[0], color="red", linestyle="--", label=f"{p[0]:.2f}: 16th percentile")
     ax_memb_dist.axvline(
         p[1],
         color="green",
@@ -242,9 +236,9 @@ def _plot_grid_with_counts(
         cmap: `str`
             The colormap to use
     """
-    max_number = max([len(pts) for _, pts in pts_in_regions])
-    cmap = mpl.colormaps[cmap]
-    colors = [cmap(len(pts) / max_number) for _, pts in pts_in_regions]
+    max_number = max([len(pts) for _, pts in pts_in_regions]) if pts_in_regions else 1
+    cmap_obj = mpl.colormaps[cmap] if isinstance(cmap, str) else cmap
+    colors = [cmap_obj(len(pts) / max_number) for _, pts in pts_in_regions]
 
     for poli, color in zip(regions, colors):
         plotting.plot_polygon(
@@ -257,20 +251,20 @@ def _plot_grid_with_counts(
         )
 
     cbar = plt.colorbar(
-        cm.ScalarMappable(cmap=cmap),
+        cm.ScalarMappable(cmap=cmap_obj),
         ax=ax,
         orientation="vertical",
         label="Number of stars",
     )
-    cbar.set_ticks(cbar.get_ticks())
-    cbar.set_ticklabels([int(el * max_number) for el in cbar.get_ticks()])
+    cbar.set_ticks(list(cbar.get_ticks()))
+    cbar.set_ticklabels([str(int(el * max_number)) for el in cbar.get_ticks()])
 
 
 def plot_cmd_and_vorgrid(b, v, regions, pts_in_regions, cmap="viridis"):
     fig, ax = plt.subplots(layout="constrained")
     ax.set(aspect="auto")
     _plot_grid_with_counts(ax, regions, pts_in_regions, cmap=cmap)
-    plot_cmd(ax, b, v, ax=ax, color="red")
+    plot_cmd(b, v, ax=ax, color="red")
     return fig
 
 
@@ -304,8 +298,8 @@ def plot_decontamination_snapshot(
     vfield,
     membership,
     member_threshold,
-    blabel="$m_{\mathrm{B}}$",
-    vlabel="$m_{\mathrm{V}}$",
+    blabel=r"$m_{\mathrm{B}}$",
+    vlabel=r"$m_{\mathrm{V}}$",
     xlim=None,
     ylim=None,
 ):
@@ -347,6 +341,7 @@ def plot_decontamination_snapshot(
     ax_decon.set(xlim=ax_cluster.get_xlim(), ylim=ax_cluster.get_ylim())
     ax_rej.set(xlim=ax_cluster.get_xlim(), ylim=ax_cluster.get_ylim())
     ax_field.set(xlim=ax_cluster.get_xlim(), ylim=ax_cluster.get_ylim())
+    return fig
 
     return fig
 
@@ -389,7 +384,7 @@ def plot_reddening_map(ra, dec, ra0, dec0, delta_E_B_V):
     ax.yaxis.set_minor_locator(MultipleLocator(0.00500))
     ax.yaxis.set_major_locator(MultipleLocator(0.01000))
     cbar = fig.colorbar(hex, ax=ax)
-    cbar.set_label("$\Delta$ E(B-V) [mag]")
+    cbar.set_label(r"$\Delta$ E(B-V) [mag]")
     cbar.ax.tick_params(length=8, pad=10)
     plt.ticklabel_format(style="plain", useOffset=False, axis="x")
     ax.set_xlabel("RA [deg]")
@@ -465,7 +460,7 @@ def traceplots(
     # 	parameters to show
     if useparams is None:
         useparams = np.linspace(0, dim - 1, dim, dtype=int)
-    if np.iterable(useparams) or np.scalar(useparams):
+    if np.iterable(useparams) or np.isscalar(useparams):
         useparams = np.asarray(useparams)
     dim = useparams.shape[0]
 
@@ -566,9 +561,7 @@ def plot_corner(
     **kwargs,
 ):
 
-    labels = (
-        labels if labels is not None else [f"C{i + 1}" for i in range(chain.shape[-1])]
-    )
+    labels = labels if labels is not None else [f"C{i + 1}" for i in range(chain.shape[-1])]
     fig = corner(
         chain,
         labels=labels,
@@ -687,9 +680,7 @@ def plot_vpd_and_mdist_component(
     hist_scale="log",
 ):
 
-    fig = plt.figure(
-        figsize=(figsize_inches + figsize_wadjust, figsize_inches + figsize_hadjust)
-    )
+    fig = plt.figure(figsize=(figsize_inches + figsize_wadjust, figsize_inches + figsize_hadjust))
     gs = GridSpec(4, 4, wspace=0, hspace=0)
 
     ax_scatter = fig.add_subplot(gs[1:4, 0:3])
@@ -861,12 +852,9 @@ def plot_vpd_and_mdist_component(
 
     # Create legend
     handles = [
-        mpl.lines.Line2D([0], [0], color=component_colors[i], lw=2.0)
-        for i in range(ncomp)
+        mpl.lines.Line2D([0], [0], color=component_colors[i], lw=2.0) for i in range(ncomp)
     ] + [mpl.lines.Line2D([0], [0], color="gray", lw=2.0)]
-    axs_dict["histx"].legend(
-        handles, component_labels, loc="upper left", ncols=2, frameon=False
-    )
+    axs_dict["histx"].legend(handles, component_labels, loc="upper left", ncols=2, frameon=False)
 
     # Histograms
     bins = 100
@@ -915,3 +903,7 @@ def plot_vpd_and_mdist_component(
     axs_dict["histx"].tick_params(which="both", direction="in")
     axs_dict["vpd"].tick_params(which="both", direction="in")
     return fig
+
+
+# Alias for compatibility
+plot_differential_reddening_map = plot_reddening_map

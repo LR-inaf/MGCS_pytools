@@ -1,15 +1,18 @@
 import logging
-import numpy as np
-from pandas import DataFrame
-import matplotlib.pyplot as plt
-from astropy.coordinates import SkyCoord
+
 import astropy.units as u
-from shapely import Polygon, Point
+import matplotlib.pyplot as plt
+import numpy as np
+from astropy.coordinates import SkyCoord
+from pandas import DataFrame
 from scipy.spatial import ConvexHull
-from .dr_correction import compute_differential_reddening
-from .cvt_grid import cvtGrid
-from .region_tools import get_regions_count, get_pts_in_regions
+from shapely import Point, Polygon
+
 from mgcs_pytools.utils import plotting as utplot
+
+from .cvt_grid import cvtGrid
+from .dr_correction import compute_differential_reddening
+from .region_tools import get_pts_in_regions, get_regions_count
 
 logger = logging.getLogger(__name__)
 #
@@ -52,9 +55,7 @@ def spatial_groupby(
     from scipy.optimize import root_scalar
 
     # Calculate the field star density and the min area for at least min stars
-    ra_center_field = (
-        df_field[racol].min() + (df_field[racol].max() - df_field[racol].min()) / 2
-    )
+    ra_center_field = df_field[racol].min() + (df_field[racol].max() - df_field[racol].min()) / 2
     dec_center_field = (
         df_field[deccol].min() + (df_field[deccol].max() - df_field[deccol].min()) / 2
     )
@@ -81,13 +82,9 @@ def spatial_groupby(
     logger.info(f"Min area for at least {minstars} stars: {min_area:.2f} arcsec^2")
 
     # groupby the cluster dataframe in bins with at least minstars
-    ra_center = (
-        df_cluster[racol].min()
-        + (df_cluster[racol].max() - df_cluster[racol].min()) / 2
-    )
+    ra_center = df_cluster[racol].min() + (df_cluster[racol].max() - df_cluster[racol].min()) / 2
     dec_center = (
-        df_cluster[deccol].min()
-        + (df_cluster[deccol].max() - df_cluster[deccol].min()) / 2
+        df_cluster[deccol].min() + (df_cluster[deccol].max() - df_cluster[deccol].min()) / 2
     )
 
     # make the FoV polygon from coordinates
@@ -102,9 +99,7 @@ def spatial_groupby(
     current_area_in = 0.0
 
     # max possible radius
-    max_r = np.max(
-        np.linalg.norm(hull.points - np.array([ra_center, dec_center]), axis=1)
-    )
+    max_r = np.max(np.linalg.norm(hull.points - np.array([ra_center, dec_center]), axis=1))
     max_r += 1e-5
 
     def get_fov_intersect_area(r: float) -> float:
@@ -145,9 +140,7 @@ def spatial_groupby(
 
     # Compute radial separation of all stars to cluster center
     # the Euclidean metric was used in Shapely buffers (r was in degrees)
-    radii = np.sqrt(
-        (df_cluster[racol] - ra_center) ** 2 + (df_cluster[deccol] - dec_center) ** 2
-    )
+    radii = np.sqrt((df_cluster[racol] - ra_center) ** 2 + (df_cluster[deccol] - dec_center) ** 2)
 
     groups = []
     for i in range(1, len(r_boundaries)):
@@ -268,8 +261,8 @@ def get_membership(
 
 
 def compute_statistical_membership(
-    df_cluster_input: DataFrame,
-    df_field_input: DataFrame,
+    df_cluster: DataFrame,
+    df_field: DataFrame,
     target_mag_col: list[str],
     target_mag_col_error: list[str],
     field_mag_col: list[str],
@@ -358,8 +351,8 @@ def compute_statistical_membership(
             differential reddening corrected magnitudes added.
     """
     # make a copy to preserve the original dataframe
-    df_cluster = df_cluster_input.copy()
-    df_field = df_field_input.copy()
+    df_cluster = df_cluster.copy()
+    df_field = df_field.copy()
 
     groups, subfovs, instrument_fov = spatial_groupby(
         df_cluster,
@@ -369,13 +362,9 @@ def compute_statistical_membership(
         minstars=minstars,
     )
 
-    ra_center = (
-        df_cluster[racol].min()
-        + (df_cluster[racol].max() - df_cluster[racol].min()) / 2
-    )
+    ra_center = df_cluster[racol].min() + (df_cluster[racol].max() - df_cluster[racol].min()) / 2
     dec_center = (
-        df_cluster[deccol].min()
-        + (df_cluster[deccol].max() - df_cluster[deccol].min()) / 2
+        df_cluster[deccol].min() + (df_cluster[deccol].max() - df_cluster[deccol].min()) / 2
     )
 
     fov_ratio = [subfov.area / parallel_fov for subfov in subfovs]
@@ -506,7 +495,11 @@ def compute_statistical_membership(
                 target_median=min_star_per_cell,
             )
 
-            regions = cvt_grid.grid if not dilate else cvt_grid.dilated_grid
+            regions = (
+                cvt_grid.dilated_grid
+                if (dilate and cvt_grid.dilated_grid is not None)
+                else cvt_grid.grid
+            )
             cluster_ids = group.index.values
 
             # count field stars in cells
@@ -545,9 +538,9 @@ def compute_statistical_membership(
                 f" {membership[:, 1].max():.4f})\n\n"
             )
 
-            df_cluster.loc[cluster_ids[membership[:, 0].astype(int)], "membership"] = (
-                membership[:, 1]
-            )
+            df_cluster.loc[cluster_ids[membership[:, 0].astype(int)], "membership"] = membership[
+                :, 1
+            ]
 
         if it == it_stop:
             break
@@ -560,3 +553,7 @@ def compute_statistical_membership(
         it += 1
 
     return df_cluster
+
+
+# Backward compatibility alias
+do_statistical_membership = compute_statistical_membership

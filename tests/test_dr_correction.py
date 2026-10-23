@@ -3,8 +3,8 @@ import pandas as pd
 from shapely import Polygon
 
 from mgcs_pytools.statistical_membership.dr_correction import (
-    compute_differential_reddening,
     ROISelector,
+    compute_differential_reddening,
 )
 
 

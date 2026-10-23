@@ -1,10 +1,10 @@
-import numpy as np
-from numpy.typing import NDArray
-
-import emcee
-from emcee.backends import HDFBackend
 import multiprocessing
 from typing import Any
+
+import emcee
+import numpy as np
+from emcee.backends import HDFBackend
+from numpy.typing import NDArray
 
 from .set_posterior import posterior
 
@@ -76,12 +76,7 @@ class MCMCEnsembleSampler:
     ) -> None:
         self.from_previous_run: bool = from_previous_run
         if not self.from_previous_run:
-            if (
-                ncomp is None
-                or par_per_comp is None
-                or nwalkers is None
-                or nsteps is None
-            ):
+            if ncomp is None or par_per_comp is None or nwalkers is None or nsteps is None:
                 raise ValueError(
                     "Must provide ncomp, par_per_comp, nwalkers and nsteps if from_previous_run is False"
                 )
@@ -106,10 +101,7 @@ class MCMCEnsembleSampler:
                 if self.qmin is None or self.qmax is None:
                     raise ValueError("Must provide qmin and qmax if p0 is not given.")
                 self.p0: NDArray = np.array(
-                    [
-                        np.random.uniform(self.qmin, self.qmax)
-                        for _ in range(self.nwalkers)
-                    ]
+                    [np.random.uniform(self.qmin, self.qmax) for _ in range(self.nwalkers)]
                 )
             else:
                 self.p0 = p0

@@ -33,3 +33,8 @@ htmlcov/
 .idea/
 *.swp
 *.swo
+
+.astropy_config/
+.astropy_cache/
+.mpl_config/
+*.png

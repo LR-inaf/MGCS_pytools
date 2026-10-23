@@ -1,6 +1,7 @@
 import numpy as np
 from numpy.typing import NDArray
-from .bivariate_normal import _logl, _lnprior
+
+from .bivariate_normal import _lnprior, _logl
 
 
 def posterior(
@@ -59,7 +60,5 @@ def posterior(
         for to_link, which in lnk_params:
             prm_new[which] = prm_new[to_link]
 
-    output = (
-        -np.inf if not np.isfinite(lp) else lp + _logl(data, prm_new, component, stride)
-    )
+    output = -np.inf if not np.isfinite(lp) else lp + _logl(data, prm_new, component, stride)
     return output

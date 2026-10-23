@@ -1,23 +1,18 @@
+from typing import List, Optional, Tuple
+
+import matplotlib.pyplot as plt
 import numpy as np
 import pandas as pd
-import matplotlib.pyplot as plt
-
+import shapely
+from scipy.interpolate import CubicSpline
 from shapely import (
     Polygon,
     plotting,
 )
 
-from scipy.interpolate import CubicSpline
-
-
-import shapely
-from typing import Optional, List, Tuple
-
 
 class ROISelector:
-    def __init__(
-        self, points: np.ndarray, vertices: Optional[List[Tuple[float, float]]] = None
-    ):
+    def __init__(self, points: np.ndarray, vertices: Optional[List[Tuple[float, float]]] = None):
         self.points = points
 
         self.ax = None
@@ -31,9 +26,7 @@ class ROISelector:
 
         if len(self.coords) >= 3:
             self.polygon = Polygon(self.coords)
-            self.points_in = shapely.contains_xy(
-                self.polygon, self.points[:, 0], self.points[:, 1]
-            )
+            self.points_in = shapely.contains_xy(self.polygon, self.points[:, 0], self.points[:, 1])
 
     def start_selection(self):
         # generate fig
@@ -63,9 +56,7 @@ class ROISelector:
         # left click add vertices
         if event.name == "button_press_event" and event.button == 1:
             self.coords.append((event.xdata, event.ydata))
-            self.ax.scatter(
-                self.coords[-1][0], self.coords[-1][1], marker="o", c="blue", zorder=3
-            )
+            self.ax.scatter(self.coords[-1][0], self.coords[-1][1], marker="o", c="blue", zorder=3)
 
             self.fig.canvas.draw()
             self.fig.canvas.flush_events()
@@ -74,9 +65,7 @@ class ROISelector:
         elif event.name == "key_press_event" and event.key == " ":
             self.coords.append(self.coords[0])  # close polygon
             self.polygon = Polygon(self.coords)  # close polygon
-            self.points_in = shapely.contains_xy(
-                self.polygon, self.points[:, 0], self.points[:, 1]
-            )
+            self.points_in = shapely.contains_xy(self.polygon, self.points[:, 0], self.points[:, 1])
             self.ax.scatter(
                 self.points[self.points_in, 0],
                 self.points[self.points_in, 1],
@@ -86,9 +75,7 @@ class ROISelector:
                 c="red",
                 zorder=3,
             )
-            self.patch = plotting.patch_from_polygon(
-                self.polygon, color="gray", alpha=0.5
-            )
+            self.patch = plotting.patch_from_polygon(self.polygon, color="gray", alpha=0.5)
 
             self.ax.add_patch(self.patch)
             self.fig.canvas.draw()
@@ -230,12 +217,8 @@ def compute_differential_reddening(
     # A(lambda)/A(V) extinction coefficients for the two bands
     abscissa = color_obs_t * np.cos(theta) + band1_t * np.sin(theta)  # new X
     ordinate = -color_obs_t * np.sin(theta) + band1_t * np.cos(theta)  # new Y
-    abscissa_ref = color_obs_t_ref * np.cos(theta) + band1_t_ref * np.sin(
-        theta
-    )  # new X
-    ordinate_ref = -color_obs_t_ref * np.sin(theta) + band1_t_ref * np.cos(
-        theta
-    )  # new Y
+    abscissa_ref = color_obs_t_ref * np.cos(theta) + band1_t_ref * np.sin(theta)  # new X
+    ordinate_ref = -color_obs_t_ref * np.sin(theta) + band1_t_ref * np.cos(theta)  # new Y
 
     if roi is None:
         # spawn cmd widget to choose box
@@ -261,18 +244,25 @@ def compute_differential_reddening(
     ms_y = y_ref[filter]
     band1_ref[filter]
 
+    if len(ms_ord) == 0:
+        raise ValueError(
+            "ROI filter selected 0 reference stars in rotated abscissa, ordinate space. "
+            "Ensure the ROI polygon overlaps with the rotated star coordinates."
+        )
+
     # here setup the iteration
-    ord_step = params["ord_step"] if "ord_step" in params else 0.1
-    ord_max = ms_ord.max()
-    ord_min = ms_ord.min()
-    n_step = (ord_max - ord_min) / ord_step
-    n_step = int(round(n_step))
+    ord_step = float(params["ord_step"]) if "ord_step" in params else 0.1
+    ord_max = float(ms_ord.max())
+    ord_min = float(ms_ord.min())
+    if ord_max <= ord_min:
+        bins = np.array([ord_min - 0.5 * ord_step, ord_min + 0.5 * ord_step])
+    else:
+        n_step = max(1, int(round((ord_max - ord_min) / ord_step)))
+        bins = np.linspace(ord_min, max(ord_max, ord_min + ord_step * n_step), n_step + 1)
 
     # Define fiducial line
     # calculate running median in the box and fit on the medians using binned_statistic
     from scipy.stats import binned_statistic
-
-    bins = np.linspace(ord_min, ord_min + ord_step * n_step, n_step + 1)
 
     median_abs, _, _ = binned_statistic(ms_ord, ms_abs, statistic="median", bins=bins)
     median_ord, _, _ = binned_statistic(ms_ord, ms_ord, statistic="median", bins=bins)
@@ -282,7 +272,17 @@ def compute_differential_reddening(
     median_abs = median_abs[valid_bins]
     median_ord = median_ord[valid_bins]
 
-    # faccio il fit
+    # Ensure strictly increasing points for CubicSpline
+    if len(median_ord) >= 2:
+        median_ord, unique_indices = np.unique(median_ord, return_index=True)
+        median_abs = median_abs[unique_indices]
+
+    if len(median_ord) < 2:
+        median_ord = np.array([ord_min - 0.1, ord_max + 0.1])
+        default_val = float(np.median(ms_abs)) if len(ms_abs) > 0 else 0.0
+        median_abs = np.array([default_val, default_val])
+
+    # Fit fiducial ridge line
     interp_ord = CubicSpline(median_ord, median_abs)
     fiducial_line_ord_all = interp_ord(ms_ord)
     # interp_abs = CubicSpline(median_abs, median_ord)
@@ -342,9 +342,7 @@ def compute_differential_reddening(
     _, indices = tree.query(points, k=n_ref + 1)
 
     ########## STEP 6: obtain median delta abscissa in the reference stars ##############
-    ref_fiducial_line_ord_all = fiducial_line_ord_all[
-        (ms_ord <= ord_max) & (ms_ord >= ord_min)
-    ]
+    ref_fiducial_line_ord_all = fiducial_line_ord_all[(ms_ord <= ord_max) & (ms_ord >= ord_min)]
 
     # compute delta abscissa
     delta_abscissa = ms_abs - ref_fiducial_line_ord_all
@@ -357,9 +355,7 @@ def compute_differential_reddening(
     stds = np.std(delta_abs_all, axis=1, keepdims=True)
 
     # Create mask for valid elements
-    mask = (delta_abs_all > (medians - 2 * stds)) & (
-        delta_abs_all < (medians + 2 * stds)
-    )
+    mask = (delta_abs_all > (medians - 2 * stds)) & (delta_abs_all < (medians + 2 * stds))
 
     # Use np.where to replace invalid elements with NaN, then compute nanmedian
     clipped = np.where(mask, delta_abs_all, np.nan)
