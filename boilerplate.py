@@ -4,7 +4,7 @@ import pandas as pd
 import numpy as np
 
 import mgcs_pytools.utils.plotting as utplot
-from mgcs_pytools.statistical_membership.membership import do_statistical_membership
+from mgcs_pytools.statistical_membership.membership import compute_statistical_membership
 
 # import the catalog
 CATALOG_PATH_CLUSTER = os.path.abspath(...)
@@ -47,7 +47,7 @@ min_star_per_cell = (
 )  # Minimum number of stars per Voronoi cell, used for the dilation process
 
 # run the statistical memberhsip
-df_output = do_statistical_membership(
+df_output = compute_statistical_membership(
     df_cluster,
     df_field,
     cluster_mag,
