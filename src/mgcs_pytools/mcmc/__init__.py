@@ -1,3 +1,5 @@
+"""MCMC-based Gaussian mixture modelling of 2D distributions (e.g. proper motions)."""
+
 from .bivariate_normal import bivariate_normal_pdf
 from .mcmc import MCMCEnsembleSampler
 from .set_posterior import posterior

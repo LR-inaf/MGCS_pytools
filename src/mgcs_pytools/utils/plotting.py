@@ -1,3 +1,10 @@
+"""Plotting utilities for the statistical membership and MCMC outcomes.
+
+The functions in this module build ready-to-use :class:`matplotlib.figure.Figure` objects
+for CMDs, Voronoi grids, membership and decontamination diagnostics, differential
+reddening maps, MCMC traces/corner plots and proper-motion vector point diagrams.
+"""
+
 from typing import Any
 
 import matplotlib as mpl
@@ -29,32 +36,36 @@ def plot_cmd(
 ) -> mpl.figure.Figure:
     """Plot CMD (Color-Magnitude Diagram) with optional customization.
 
-    Parameters:
-        b: `NDArray`
-            Magnitudes in band B
-        v: `NDArray`
-            Magnitudes in band V
-        ax: `mpl.axes.Axes`
-            Axes to plot on (optional)
-        ms: `int`
-            Marker size (default: 1)
-        lw: `float`
-            Line width (default: 0.3)
-        color: `str`
-            Marker color (default: "black")
-        cmap: `str | None`
-            Colormap for coloring points (default: None)
-        alpha: `float`
-            Transparency level (default: 0.3)
-        inverty: `bool`
-            Whether to invert the y-axis (default: True)
-        **kwargs:
-            Additional keyword arguments for customization
+    The colour ``b - v`` is shown on the x-axis and the magnitude ``b`` on the y-axis.
 
-    Returns: `mpl.figure.Figure`
-        Figure object containing the CMD plot
+    Parameters
+    ----------
+    b : NDArray
+        Magnitudes in band B.
+    v : NDArray
+        Magnitudes in band V.
+    ax : matplotlib.axes.Axes, optional
+        Axes to plot on. If None, a new figure is created.
+    ms : int, optional
+        Marker size. Default is 1.
+    lw : float, optional
+        Line width. Default is 0.3.
+    color : str or array-like, optional
+        Marker color, or values mapped through ``cmap``. Default is ``"black"``.
+    cmap : str or None, optional
+        Colormap for coloring points. Default is None.
+    alpha : float, optional
+        Transparency level. Default is 0.3.
+    inverty : bool, optional
+        Whether to invert the y-axis. Default is True.
+    **kwargs
+        Additional keyword arguments passed to :meth:`matplotlib.axes.Axes.set`.
+
+    Returns
+    -------
+    matplotlib.figure.Figure
+        Figure object containing the CMD plot.
     """
-
     if ax is None:
         _, ax = plt.subplots(layout="constrained")
 
@@ -91,30 +102,37 @@ def plot_membership_overview(
     cmd_cmap: str = "coolwarm",
 ) -> mpl.figure.Figure:
     r"""Plot an overview of membership in the CMD space.
-    Parameters:
-        btarget: `NDArray`
-            Magnitudes in band B for the target
-        vtarget: `NDArray`
-            Magnitudes in band V for the target
-        bfield: `NDArray`
-            Magnitudes in band B for the field
-        vfield: `NDArray`
-            Magnitudes in band V for the field
-        membership: `NDArray`
-            Membership values for the target stars
-        blabel: `str`
-            Label for the B band (default: "$m_{\mathrm{B}}$")
-        vlabel: `str`
-            Label for the V band (default: "$m_{\mathrm{V}}$")
-        xlim: `tuple[float, float]`
-            X-axis limits (default: None)
-        ylim: `tuple[float, float]`
-            Y-axis limits (default: None)
-        cmd_cmap: `str`
-            Colormap for the CMD plots (default: "coolwarm")
 
-    Returns: `mpl.figure.Figure`
-        Figure object containing the membership overview plot
+    The figure has four panels: target CMD, field CMD, target CMD colored by membership
+    and the membership distribution with its 16th, 50th and 84th percentiles.
+
+    Parameters
+    ----------
+    btarget : NDArray
+        Magnitudes in band B for the target.
+    vtarget : NDArray
+        Magnitudes in band V for the target.
+    bfield : NDArray
+        Magnitudes in band B for the field.
+    vfield : NDArray
+        Magnitudes in band V for the field.
+    membership : NDArray
+        Membership values for the target stars.
+    blabel : str, optional
+        Label for the B band. Default is ``r"$m_{\mathrm{B}}$"``.
+    vlabel : str, optional
+        Label for the V band. Default is ``r"$m_{\mathrm{V}}$"``.
+    xlim : tuple of float, optional
+        X-axis limits. Default is None.
+    ylim : tuple of float, optional
+        Y-axis limits. Default is None.
+    cmd_cmap : str, optional
+        Colormap for the CMD plots. Default is ``"coolwarm"``.
+
+    Returns
+    -------
+    matplotlib.figure.Figure
+        Figure object containing the membership overview plot.
     """
     fig, [[ax_cmd_tg, ax_cmd_fl], [ax_cmd_tg_memb, ax_memb_dist]] = plt.subplots(
         2, 2, layout="constrained", figsize=(12, 12)
@@ -180,24 +198,27 @@ def show_cmds_with_voronoi(
     pady: float = 0.05,
 ) -> mpl.figure.Figure:
     """Show CMDs with Voronoi tessellation.
-    Parameters:
-        cvor: `Voronoi`
-            Voronoi diagram to plot
-        cpoints: `NDArray`
-            Points to plot
-        b: `NDArray`
-            B-band magnitudes
-        v: `NDArray`
-            V-band magnitudes
-        padx: `float`
-            Padding for x-axis
-        pady: `float`
-            Padding for y-axis
 
-    Returns: `mpl.figure.Figure`
-        Figure object containing the CMD plot with Voronoi tessellation
+    Parameters
+    ----------
+    cvor : scipy.spatial.Voronoi
+        Voronoi diagram to plot.
+    cpoints : NDArray
+        Points used to build the diagram; they define the plot limits.
+    b : NDArray
+        B-band magnitudes.
+    v : NDArray
+        V-band magnitudes.
+    padx : float, optional
+        Padding for the x-axis. Default is 0.05.
+    pady : float, optional
+        Padding for the y-axis. Default is 0.05.
+
+    Returns
+    -------
+    matplotlib.figure.Figure
+        Figure object containing the CMD plot with Voronoi tessellation.
     """
-
     fig, ax = plt.subplots(layout="constrained")
 
     voronoi_plot_2d(
@@ -224,17 +245,18 @@ def _plot_grid_with_counts(
     pts_in_regions: list[tuple],
     cmap: str = "viridis",
 ):
-    """
-    Plot a Voronoi grid with counts of points in each region.
-    Parameters:
-        ax: `mpl.axes.Axes`
-            The axes to plot on
-        regions: `list[Polygon]`
-            The Voronoi regions
-        pts_in_regions: `list[tuple]`
-            The points in each region
-        cmap: `str`
-            The colormap to use
+    """Plot a Voronoi grid with counts of points in each region.
+
+    Parameters
+    ----------
+    ax : matplotlib.axes.Axes
+        The axes to plot on.
+    regions : list of Polygon
+        The Voronoi regions.
+    pts_in_regions : list of tuple
+        The ``(region_id, points)`` pairs with the points in each region.
+    cmap : str, optional
+        The colormap used to encode the number of points. Default is ``"viridis"``.
     """
     max_number = max([len(pts) for _, pts in pts_in_regions]) if pts_in_regions else 1
     cmap_obj = mpl.colormaps[cmap] if isinstance(cmap, str) else cmap
@@ -261,6 +283,26 @@ def _plot_grid_with_counts(
 
 
 def plot_cmd_and_vorgrid(b, v, regions, pts_in_regions, cmap="viridis"):
+    """Plot a CMD on top of a Voronoi grid colored by the number of stars per cell.
+
+    Parameters
+    ----------
+    b : NDArray
+        B-band magnitudes.
+    v : NDArray
+        V-band magnitudes.
+    regions : list of Polygon
+        The Voronoi regions.
+    pts_in_regions : list of tuple
+        The ``(region_id, points)`` pairs with the stars in each region.
+    cmap : str, optional
+        Colormap used to encode the number of stars per cell. Default is ``"viridis"``.
+
+    Returns
+    -------
+    matplotlib.figure.Figure
+        Figure object containing the CMD and the Voronoi grid.
+    """
     fig, ax = plt.subplots(layout="constrained")
     ax.set(aspect="auto")
     _plot_grid_with_counts(ax, regions, pts_in_regions, cmap=cmap)
@@ -269,6 +311,25 @@ def plot_cmd_and_vorgrid(b, v, regions, pts_in_regions, cmap="viridis"):
 
 
 def plot_spatial_membership(ra, dec, membership, member_threshold):
+    """Plot the sky positions of rejected and member stars side by side.
+
+    Parameters
+    ----------
+    ra : NDArray
+        Right ascension of the stars.
+    dec : NDArray
+        Declination of the stars.
+    membership : NDArray
+        Membership probability of each star.
+    member_threshold : float
+        Stars with membership strictly above (below) this value are shown as members
+        (rejected).
+
+    Returns
+    -------
+    matplotlib.figure.Figure
+        Figure object with the "Rejected stars" and "Member stars" panels.
+    """
     fig, [ax_rej, ax_memb] = plt.subplots(
         1,
         2,
@@ -303,6 +364,39 @@ def plot_decontamination_snapshot(
     xlim=None,
     ylim=None,
 ):
+    r"""Plot the CMD decontamination result at a given membership threshold.
+
+    The figure has four panels: the target (cluster + field) CMD, the stars retained as
+    members, the rejected stars and the parallel field CMD.
+
+    Parameters
+    ----------
+    btarget : NDArray
+        Magnitudes in band B for the target.
+    vtarget : NDArray
+        Magnitudes in band V for the target.
+    bfield : NDArray
+        Magnitudes in band B for the field.
+    vfield : NDArray
+        Magnitudes in band V for the field.
+    membership : NDArray
+        Membership probability of the target stars.
+    member_threshold : float
+        Membership threshold separating members from rejected stars.
+    blabel : str, optional
+        Label for the B band. Default is ``r"$m_{\mathrm{B}}$"``.
+    vlabel : str, optional
+        Label for the V band. Default is ``r"$m_{\mathrm{V}}$"``.
+    xlim : tuple of float, optional
+        X-axis limits. Default is None.
+    ylim : tuple of float, optional
+        Y-axis limits. Default is None.
+
+    Returns
+    -------
+    matplotlib.figure.Figure
+        Figure object containing the decontamination snapshot.
+    """
     fig, [[ax_cluster, ax_decon], [ax_rej, ax_field]] = plt.subplots(
         2,
         2,
@@ -347,6 +441,26 @@ def plot_decontamination_snapshot(
 
 
 def plot_reddening_map(ra, dec, ra0, dec0, delta_E_B_V):
+    """Plot the differential reddening map as a hexbin of the median delta E(B-V).
+
+    Parameters
+    ----------
+    ra : NDArray
+        Right ascension of the stars [deg].
+    dec : NDArray
+        Declination of the stars [deg].
+    ra0 : float
+        Reference right ascension subtracted from ``ra`` [deg].
+    dec0 : float
+        Reference declination subtracted from ``dec`` [deg].
+    delta_E_B_V : NDArray
+        Differential reddening of each star [mag].
+
+    Returns
+    -------
+    matplotlib.figure.Figure
+        Figure object containing the reddening map.
+    """
     fig, ax = plt.subplots(layout="constrained", figsize=(12, 10))
     hex = ax.hexbin(
         ra - ra0,
@@ -411,32 +525,58 @@ def traceplots(
     tickoff=None,
     kwargs=None,
 ):
-    """
-    The method plots the traceplots associated to an MCMC run
+    """Plot the trace plots associated to an MCMC run.
 
     Parameters
-    -------------->>
-    chains		:	Chains from MCMC (shape ndraws x nwalkers x dim)
-    naxes		:	Number of rows and columns to plot. Must be a 2d iterable.
-                                    Raise an error if the number of axes is larger than the number
-                                    of parameters to plot. Default is 6 rows and dim/6
-                                    columns
-    useparams	:	Indexes corresponing to the parameters to plot. Default all
-    delchains	:	Chains to discard. Default None
-    Usechains	:	Chains to use. Default all. If usechains is given, delchains
-                                    is ignored
-    burnin		:	Burn-in. Default None
-    labels		:	Labels corresponing to each parameter
-    fnt 		: 	Label size. Default {labesize:16}
-    figsize		:	Size of figure. Default (6,6)
-    title       :	Title of the figure. Default "Trace plots"
-    color		:	Color used for the chains (all chains have the same color). Defult black
-    colorburnin	:	Color used for the burn-in. Defult salmon
-    tickoff		:	if True, delete labels and ticks on overlapping panels
-    kwargs		: 	additional dictionary to be used in plot
+    ----------
+    chains : NDArray
+        Chains from MCMC, with shape (ndraws, nwalkers, dim).
+    naxes : iterable of int, optional
+        Number of rows and columns to plot, as ``(nrows, ncols)``. Must contain enough
+        axes for all the parameters to plot. With ``dim`` the number of plotted
+        parameters, the default is ``(dim, 1)`` if ``dim <= 6``, otherwise
+        ``(6, dim // 6 + 1)``.
+    useparams : array-like of int, optional
+        Indexes corresponding to the parameters to plot. Default is all.
+    delchains : array-like of int, optional
+        Indexes of the walkers to discard. They are drawn only if ``showdel`` is True.
+        Default is None.
+    usechains : array-like of int, optional
+        Indexes of the walkers to use. Default is all walkers (when ``delchains`` is
+        also None).
+    showdel : bool, optional
+        If True, also draw the discarded walkers with swapped colors. Default is False.
+    burnin : int, optional
+        Number of burn-in draws, drawn with ``colorburnin``. Default is 0.
+    labels : array-like of str, optional
+        Labels corresponding to each parameter. Default is ``"param <i>"``.
+    fnt : dict, optional
+        Font keyword arguments for the axis labels. Default is ``{"fontsize": 16}``.
+    figsize : tuple of float, optional
+        Size of the figure. Default is (6, 6).
+    title : str, optional
+        Title of the figure. Default is ``"Trace plots"``.
+    color : str, optional
+        Color used for the chains (all chains have the same color). Default is ``"black"``.
+    colorburnin : str, optional
+        Color used for the burn-in. Default is ``"salmon"``.
+    tickoff : bool, optional
+        If True, delete labels and ticks on overlapping panels. Default is False.
+    kwargs : dict, optional
+        Additional keyword arguments passed to :meth:`matplotlib.axes.Axes.plot`.
+        Default is ``{"lw": 0.5, "ls": "-"}``.
 
+    Returns
+    -------
+    matplotlib.figure.Figure
+        Figure object containing the trace plots.
+
+    Raises
+    ------
+    ValueError
+        If ``usechains``, ``naxes`` or ``labels`` are invalid, or if the requested axes
+        are not enough for the parameters to plot.
     """
-
     ndraws, nwalkers, dim = chains.shape
 
     # 	#	#	sanity check on parameters
@@ -560,7 +700,30 @@ def plot_corner(
     title="Corner plots",
     **kwargs,
 ):
+    """Plot the corner plot of an MCMC chain.
 
+    Parameters
+    ----------
+    chain : NDArray
+        Samples with shape (nsamples, ndim).
+    labels : list of str, optional
+        Labels of the parameters. Default is ``"C<i>"``.
+    quantiles : list of float, optional
+        Quantiles shown on the 1D histograms. Default is [0.16, 0.5, 0.84].
+    bins : int, optional
+        Number of bins of the histograms. Default is 20.
+    truths : array-like, optional
+        Reference values to overplot. Default is None.
+    title : str, optional
+        Title of the figure. Default is ``"Corner plots"``.
+    **kwargs
+        Additional keyword arguments passed to :func:`corner.corner`.
+
+    Returns
+    -------
+    matplotlib.figure.Figure
+        Figure object containing the corner plot.
+    """
     labels = labels if labels is not None else [f"C{i + 1}" for i in range(chain.shape[-1])]
     fig = corner(
         chain,
@@ -582,25 +745,29 @@ def univar_norm_pdf(
     sigma: NDArray | float,
     w: NDArray | float = 1.0,
 ) -> NDArray:
-    """
-    Weighted PDF of the univariate normal distribution.
+    """Weighted PDF of the univariate normal distribution.
 
     Parameters
     ----------
-    x : array, shape (Nx,)
-        Values at which to compute the pdf
-    mu : float o array, shape (Nparams,)
-        Mean of the distribution (single or multiple)
-    sigma : float o array, shape (Nparams,)
-        Standard deviation (single or multiple)
-    w : float o array, shape (Nparams,), default=1.0
-        Weight for each distribution
+    x : NDArray
+        Values at which to compute the PDF, shape (Nx,).
+    mu : NDArray or float
+        Mean of the distribution (single or multiple), shape (Nparams,).
+    sigma : NDArray or float
+        Standard deviation (single or multiple), shape (Nparams,).
+    w : NDArray or float, optional
+        Weight of each distribution, shape (Nparams,). Default is 1.0.
 
     Returns
     -------
-    pdf : array
-        - shape (Nx,)
-        - shape (Nparams, Nx)
+    NDArray
+        Weighted PDF, shape (Nx,) if ``mu``, ``sigma`` and ``w`` are all scalars (size 1),
+        otherwise (Nparams, Nx).
+
+    Raises
+    ------
+    ValueError
+        If ``mu``, ``sigma`` and ``w`` do not have the same length (or are not scalars).
     """
     x = np.atleast_1d(x)
     mu = np.atleast_1d(mu)
@@ -637,6 +804,31 @@ def univar_norm_pdf(
 def _generate_gaussian_distribution_from_mcmc_chain(
     x, ch, mupar, sigmapar, w=None, sigma_error=None
 ):
+    """Evaluate the normal PDF of a component for every sample of an MCMC chain.
+
+    The standard deviation of each sample is broadened by the median measurement error.
+
+    Parameters
+    ----------
+    x : NDArray
+        Values at which to compute the PDF.
+    ch : NDArray
+        MCMC samples, with shape (nsamples, ndim).
+    mupar : int
+        Column of ``ch`` holding the mean.
+    sigmapar : int
+        Column of ``ch`` holding the intrinsic standard deviation.
+    w : NDArray or float, optional
+        Weight of the component for each sample. Default is 1.
+    sigma_error : NDArray, optional
+        Measurement errors, whose median is added in quadrature to the standard deviation.
+        Default is None (no broadening).
+
+    Returns
+    -------
+    NDArray
+        PDF values with shape (nsamples, Nx).
+    """
     if w is None:
         w = np.ones(ch.shape[0])
 
@@ -679,7 +871,79 @@ def plot_vpd_and_mdist_component(
     component_colors=None,
     hist_scale="log",
 ):
+    """Plot a vector point diagram with the marginal distributions of the mixture components.
 
+    The central panel shows the points (optionally colored by membership and with error
+    bars); the top and right panels show the histograms of the data and the 5th-95th
+    percentile bands of each model component and of their sum, computed from the MCMC chain.
+
+    Parameters
+    ----------
+    mux : NDArray
+        Values along the x-axis (e.g. proper motion in RA).
+    muy : NDArray
+        Values along the y-axis (e.g. proper motion in Dec).
+    ch : NDArray
+        MCMC samples, with shape (nsamples, ndim).
+    membership : NDArray, optional
+        Membership probability of each point, used to color the points. Default is None.
+    ncomp : int, optional
+        Number of mixture components. Default is 1.
+    par_per_comp : int, optional
+        Number of parameters per component. Default is 5.
+    component_labels : list of str, optional
+        Labels of the components (length ``ncomp``); ``"SUM"`` is appended.
+        Default is ``"C<i>"``.
+    w : NDArray, optional
+        Samples of the first ``ncomp - 1`` mixture weights, with shape (ncomp - 1, nsamples).
+        The weight of the last component is ``1 - w.sum(axis=0)``. Default is None.
+    muxpar : int, optional
+        Index of the mean along x of the first component in ``ch``. Default is 0.
+    muypar : int, optional
+        Index of the mean along y of the first component in ``ch``. Default is 1.
+    sigxpar : int, optional
+        Index of the standard deviation along x of the first component in ``ch``.
+        Default is 2.
+    sigypar : int, optional
+        Index of the standard deviation along y of the first component in ``ch``.
+        Default is 3.
+    xerror : NDArray, optional
+        Measurement errors along x, drawn as error bars and added (median) in quadrature
+        to the model widths. Default is None.
+    yerror : NDArray, optional
+        Measurement errors along y, drawn as error bars and added (median) in quadrature
+        to the model widths. Default is None.
+    vpd_xlabel : str, optional
+        Label of the x-axis of the central panel. Default is None.
+    vpd_ylabel : str, optional
+        Label of the y-axis of the central panel. Default is None.
+    figsize_inches : float, optional
+        Base figure size in inches. Default is 8.
+    figsize_wadjust : float, optional
+        Offset added to the figure width. Default is 0.0.
+    figsize_hadjust : float, optional
+        Offset added to the figure height. Default is -0.6.
+    xlim : tuple of float, optional
+        X-axis limits of the central panel. Default is None.
+    ylim : tuple of float, optional
+        Y-axis limits of the central panel. Default is None.
+    membership_cmap : str, optional
+        Colormap used for the membership. Default is ``"coolwarm"``.
+    component_colors : list, optional
+        Colors of the components (length ``ncomp``). Default is the ``"Set1"`` colormap.
+    hist_scale : str, optional
+        Scale of the marginal PDF axes. Default is ``"log"``.
+
+    Returns
+    -------
+    matplotlib.figure.Figure
+        Figure object containing the vector point diagram and marginal distributions.
+
+    Raises
+    ------
+    AssertionError
+        If the length of ``component_colors`` or ``component_labels`` is not ``ncomp``.
+    """
     fig = plt.figure(figsize=(figsize_inches + figsize_wadjust, figsize_inches + figsize_hadjust))
     gs = GridSpec(4, 4, wspace=0, hspace=0)
 

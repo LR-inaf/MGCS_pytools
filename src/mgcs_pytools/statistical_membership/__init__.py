@@ -1,3 +1,9 @@
+"""Statistical membership: CMD decontamination and differential reddening correction.
+
+The decontamination relies on an adaptive Voronoi (CVT) grid in the colour-magnitude
+diagram, combined with a differential reddening correction.
+"""
+
 from .cvt_grid import CVTGrid, cvtGrid
 from .dr_correction import ROISelector, compute_differential_reddening
 from .membership import compute_statistical_membership, get_membership, spatial_groupby

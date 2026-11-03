@@ -161,7 +161,7 @@ def get_component_membership_from_mcmc_chain(
     par_per_comp : int
         Number of parameters per component (typically 5: mu1, mu2, s1, s2, rho).
     batch_size : int, optional
-        Batch size across chain samples to limit peak memory usage, by default 1000.
+        Batch size across chain samples to limit peak memory usage. Default is 1000.
 
     Returns
     -------

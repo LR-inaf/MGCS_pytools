@@ -1,3 +1,11 @@
+"""Differential reddening correction of a cluster colour-magnitude diagram (CMD).
+
+The CMD is translated to the main-sequence turn-off and rotated so that the reddening
+vector is parallel to the abscissa. A fiducial line is fitted on the reference main-sequence
+stars, and the median abscissa offset of the nearest reference stars gives the differential
+reddening of each star.
+"""
+
 from typing import List, Optional, Tuple
 
 import matplotlib.pyplot as plt
@@ -12,6 +20,42 @@ from shapely import (
 
 
 class ROISelector:
+    """Interactive polygon selector (region of interest) on a 2D scatter plot.
+
+    The instance is registered as the callback of the matplotlib mouse and keyboard
+    events: left click adds a vertex, spacebar closes the polygon, ``c`` cancels it and
+    ``q`` ends the interactive session.
+
+    Parameters
+    ----------
+    points : NDArray
+        Array with shape (N, 2) of the points to select from.
+    vertices : list of tuple of float, optional
+        Initial polygon vertices. If at least three vertices are given, the polygon is
+        built immediately and no interaction is required. Default is None.
+
+    Attributes
+    ----------
+    points : NDArray
+        Array of 2D input points.
+    coords : list of tuple of float
+        Current polygon vertices.
+    polygon : shapely.Polygon or None
+        Selected polygon, None until it has been closed.
+    points_in : NDArray or None
+        Boolean mask of ``points`` lying inside ``polygon``, None until the polygon is closed.
+    ax : matplotlib.axes.Axes or None
+        Matplotlib axes for the selection figure.
+    fig : matplotlib.figure.Figure or None
+        Matplotlib figure for interactive selection.
+    patch : matplotlib.patches.Polygon or None
+        Drawn polygon patch.
+    cid_MOUSE : int or None
+        Event callback connection ID for mouse button events.
+    cid_KEYBOARD : int or None
+        Event callback connection ID for key press events.
+    """
+
     def __init__(self, points: np.ndarray, vertices: Optional[List[Tuple[float, float]]] = None):
         self.points = points
 
@@ -29,6 +73,11 @@ class ROISelector:
             self.points_in = shapely.contains_xy(self.polygon, self.points[:, 0], self.points[:, 1])
 
     def start_selection(self):
+        """Open the interactive figure and start the polygon selection.
+
+        The figure shows ``points`` together with the available key bindings and blocks
+        until the window is closed.
+        """
         # generate fig
         self.generate_fig()
 
@@ -52,7 +101,14 @@ class ROISelector:
         plt.show()
 
     def __call__(self, event):
+        """Handle a matplotlib mouse or keyboard event.
 
+        Parameters
+        ----------
+        event : matplotlib.backend_bases.MouseEvent or matplotlib.backend_bases.KeyEvent
+            ``button_press_event`` (left click adds a vertex) or ``key_press_event``
+            (space closes the polygon, ``c`` cancels it, ``q`` quits).
+        """
         # left click add vertices
         if event.name == "button_press_event" and event.button == 1:
             self.coords.append((event.xdata, event.ydata))
@@ -122,6 +178,7 @@ class ROISelector:
             return
 
     def generate_fig(self):
+        """Create the figure and connect the mouse and keyboard event callbacks."""
         self.fig, self.ax = plt.subplots(layout="constrained")
         self.cid_MOUSE = self.ax.figure.canvas.mpl_connect("button_press_event", self)
         self.cid_KEYBOARD = self.ax.figure.canvas.mpl_connect("key_press_event", self)
@@ -135,37 +192,48 @@ def compute_differential_reddening(
     roi: Optional[List[Tuple[float, float]] | Polygon] = None,
     plot: bool = False,
 ) -> Tuple[np.ndarray, np.ndarray, np.ndarray, Optional[Polygon]]:
-    """
-    Computes the differential reddening correction for a cluster.
+    """Compute the differential reddening correction for a cluster.
 
     Parameters
     ----------
-    df : pd.DataFrame
-        DataFrame containing the photometric data.
+    df : DataFrame
+        DataFrame containing the photometric data. It must contain the columns named in
+        ``params`` plus ``membership`` (membership probability) and ``delta_ebv``
+        (initial differential reddening).
     params : dict
-        Dictionary of parameters (e.g., column names, extinction coefficients, MS turn-off).
+        Dictionary of parameters. Required keys: ``xcol`` and ``ycol`` (spatial coordinate
+        columns), ``band1`` and ``band2`` (magnitude columns), ``rband1`` and ``rband2``
+        (A(lambda)/A(V) extinction ratios of band1 and band2, multiplied internally by
+        R_V = 3.1 to obtain A(lambda)/E(B-V)),
+        ``TO_mag`` and ``TO_color`` (main-sequence turn-off magnitude and colour).
+        Optional keys: ``n_reference_stars`` (alias ``nref``, number of nearest reference
+        stars, default 50) and ``ord_step`` (bin size along the ordinate, default 0.1).
     member_threshold : float, optional
-        Membership probability threshold to select reference stars, by default 0.9.
+        Membership probability threshold to select reference stars. Default is 0.9.
     calc_correction_threshold : bool, optional
-        If True, applies a 2-sigma threshold to the evaluated differential reddening, by default True.
+        If True, applies a 2-sigma threshold to the evaluated differential reddening. Default is True.
     roi : list of tuples or Polygon, optional
-        Region of interest in the transformed CMD defining the main sequence, by default None.
+        Region of interest in the transformed CMD defining the main sequence. Default is None.
         If None, triggers an interactive GUI selection (requires a display).
     plot : bool, optional
-        If True, plots the fiducial line fit, by default False.
+        If True, plots the fiducial line fit. Default is False.
 
     Returns
     -------
-    band1 : np.ndarray
+    band1 : NDArray
         Corrected magnitudes for band 1.
-    band2 : np.ndarray
+    band2 : NDArray
         Corrected magnitudes for band 2.
-    delta_E_B_V : np.ndarray
-        Evaluated differential reddening for each star.
-    poli : Polygon or None
+    delta_E_B_V : NDArray
+        Evaluated differential reddening for each star [mag].
+    poli : shapely.Polygon or None
         The selected region of interest (Polygon) used for defining MS reference stars.
-    """
 
+    Raises
+    ------
+    ValueError
+        If the region of interest contains no reference stars.
+    """
     # setup E(B-V)
     # exctintion laws
     rband1 = 3.1 * params["rband1"]

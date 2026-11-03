@@ -1,3 +1,10 @@
+"""Bivariate normal PDF, log-likelihood and log-prior helpers for the MCMC.
+
+This module provides the building blocks used by :func:`mgcs_pytools.mcmc.posterior`:
+the bivariate normal PDF, the log-likelihood of a mixture of bivariate normal components
+(broadened by the per-star measurement errors) and the log-prior on the model parameters.
+"""
+
 import numpy as np
 from numpy.typing import NDArray
 
@@ -58,7 +65,8 @@ def _logl(data: NDArray, prm: NDArray, component: int, stride: int = 5) -> float
     prm : NDArray
         Parameter array containing the parameters for each component and weights.
         For each component, the parameters are (mu1, mu2, sigma1, sigma2, rho).
-        If there are multiple components, the last (component - 1) elements are weights.
+        If there are multiple components, the last (component - 1) elements are weights;
+        for a single component the last element is its weight.
     component : int
         Number of bivariate normal components in the mixture.
     stride : int, optional
@@ -108,23 +116,28 @@ def _logl(data: NDArray, prm: NDArray, component: int, stride: int = 5) -> float
 def _lnprior(prm: NDArray, qmin: NDArray, qmax: NDArray, ncomp: int) -> float:
     """Log-prior function for the parameters.
 
-    Args:
-        prm: NDArray
-            Parameter array containing the parameters for each component and weights.
-            For each component, the parameters are (mu1, mu2, sigma1, sigma2, rho).
-            If there are multiple components, the last (component - 1) elements are weights.
-        qmin: NDArray
-            Minimum values for each parameter.
-        qmax: NDArray
-            Maximum values for each parameter.
-        ncomp: int
-            Number of bivariate normal components in the mixture.
+    The prior is uniform within the bounds ``[qmin, qmax]``.
 
-    Returns:
-        log_prior: float
-            The log-prior value.
+    Parameters
+    ----------
+    prm : NDArray
+        Parameter array containing the parameters for each component and weights.
+        For each component, the parameters are (mu1, mu2, sigma1, sigma2, rho).
+        If there are multiple components, the last (ncomp - 1) elements are weights;
+        for a single component the last element is its weight.
+    qmin : NDArray
+        Minimum values for each parameter.
+    qmax : NDArray
+        Maximum values for each parameter.
+    ncomp : int
+        Number of bivariate normal components in the mixture.
+
+    Returns
+    -------
+    float
+        ``0.0`` if all parameters lie within the bounds (and, for mixtures, the weights
+        sum to at most one), ``-inf`` otherwise.
     """
-
     if ncomp > 1:
         ws = prm[-(ncomp - 1) :]
         if (prm < qmin).any() or (prm > qmax).any() or 1 - ws.sum() < 0.0:

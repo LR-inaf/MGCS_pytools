@@ -1,3 +1,10 @@
+"""Statistical membership of cluster stars via CMD decontamination.
+
+Cluster stars are grouped in concentric spatial regions, corrected for differential
+reddening and compared with a field CMD on a Voronoi grid to estimate the membership
+probability of each star.
+"""
+
 import logging
 
 import astropy.units as u
@@ -29,28 +36,35 @@ def spatial_groupby(
     minstars: int = 200,
 ) -> tuple[list[DataFrame], list[Polygon], Polygon]:
     """Group stars in the cluster dataframe by their spatial location.
-    The grouping is done by creating concentric annuli around the center of the
-    cluster and dividing each annulus in regions with at least minstars stars.
 
-    Args:
-        df_cluster: DataFrame
-            DataFrame containing the cluster stars.
-        df_field: DataFrame
-            DataFrame containing the field stars.
-        racol: str
-            Name of the column containing the RA of the stars.
-        deccol: str
-            Name of the column containing the DEC of the stars.
-        minstars: int, optional
-            Minimum number of stars in each region. Default is 200.
+    The convex hull of the cluster star positions is used as the FoV and is split in
+    concentric regions (a central disc followed by annuli) around the center of the
+    RA/DEC range. Each region has the area expected to contain about ``minstars`` field
+    stars, given the field star density estimated from ``df_field``; the last region
+    absorbs the remainder. Coordinates and areas are in degrees.
 
-    Returns:
-        groups: list of DataFrame
-            List of DataFrames, each containing the stars in a region.
-        subfovs: list of Polygon
-            List of Polygons, each containing the area of a region.
-        fov: Polygon
-            Polygon containing the area of the instrument FoV.
+    Parameters
+    ----------
+    df_cluster : DataFrame
+        DataFrame containing the cluster stars.
+    df_field : DataFrame
+        DataFrame containing the field stars.
+    racol : str
+        Name of the column containing the RA of the stars.
+    deccol : str
+        Name of the column containing the DEC of the stars.
+    minstars : int, optional
+        Target number of field stars in each region (sets the area of the regions).
+        Default is 200.
+
+    Returns
+    -------
+    groups : list of DataFrame
+        List of DataFrames, each containing the cluster stars in a region.
+    subfovs : list of Polygon
+        List of Polygons, each containing the area of a region.
+    fov : Polygon
+        Convex hull of the cluster star positions, used as the FoV.
     """
     from scipy.optimize import root_scalar
 
@@ -165,31 +179,37 @@ def get_membership(
     fov_ratio: float = 1.0,
     method: str = "analytical",
 ) -> np.ndarray:
-    """Get the membership of each stars.
+    """Get the membership of each star.
 
-    Args:
-        cell_counts: list of tuple(int, int)
-            List of tuples containing the region id and the number of field stars
-            in that region.
-        cell_points: list of tuple(int, list of Point)
-            List of tuples containing the region id and the list of Points
-            corresponding to the cluster stars in that region.
-        common_regions: list of int
-            List of region ids that are common between the field and cluster
-            stars.
-        iter: int, optional
-            Number of iterations to perform if using montecarlo. Default is 1000.
-        fov_ratio: float, optional
-            Ratio between the instrument FoV and the sub-FoV area.
-            Default is 1.0.
-        method: str, optional
-            Method to compute probability ("analytical" or "montecarlo").
-            Default is "analytical".
+    Parameters
+    ----------
+    cell_counts : list of tuple of (int, int)
+        List of tuples containing the region id and the number of field stars
+        in that region.
+    cell_points : list of tuple of (int, list of int)
+        List of tuples containing the region id and the positional indices of the
+        cluster stars in that region.
+    common_regions : list of int
+        List of region ids that are common between the field and cluster
+        stars.
+    iter : int, optional
+        Number of iterations to perform if using montecarlo. Default is 1000.
+    fov_ratio : float, optional
+        Ratio between the sub-FoV area and the area covered by the field sample
+        (used to rescale the field counts). Default is 1.0.
+    method : {"analytical", "montecarlo"}, optional
+        Method to compute probability. Default is "analytical".
 
-    Returns:
-        membership: np.ndarray
-            Array of shape (N, 2) containing the star index and its membership
-            probability.
+    Returns
+    -------
+    NDArray
+        Array of shape (N, 2) containing the star index and its membership
+        probability.
+
+    Raises
+    ------
+    ValueError
+        If ``method`` is not ``"analytical"`` or ``"montecarlo"``.
     """
     if method not in ["analytical", "montecarlo"]:
         raise ValueError("method must be 'analytical' or 'montecarlo'")
@@ -283,72 +303,84 @@ def compute_statistical_membership(
 ) -> DataFrame:
     """Compute the statistical membership of stars in a cluster field.
 
-    Args:
-        df_cluster_input: DataFrame
-            DataFrame containing the cluster stars.
-        df_field_input: DataFrame
-            DataFrame containing the field stars.
-        target_mag_col: list of str
-            List containing the names of the columns with the magnitudes
-            to use for the target CMD (color, mag).
-        target_mag_col_error: list of str
-            List containing the names of the columns with the magnitude errors
-            to use for the target CMD (color, mag).
-        field_mag_col: list of str
-            List containing the names of the columns with the magnitudes
-            to use for the field CMD (color, mag).
-        dr_params: dict of str
-            Dictionary containing inputs parameters for the differential reddening
-            correction. It must contain the following keys:
-            - 'rband1': the exction value in band1,
-            - 'rband2': the exction value in band2,
-            - 'TO_mag': the magnitude of the Turn-off,
-            - 'TO_color': the color of the Turn-off,
-            - 'nref': the number of reference stars,
-            - 'xcol': the name of the column containing the x coordinates,
-            - 'ycol': the name of the column containing the y coordinates,
-            - 'ord_step': the bin size in the 'ordinate' to calculate the ridge line
-        parallel_fov: float
-            Size of the parallel FoV in deg square.
-        member_threshold: float, optional
-            Membership threshold to consider a star as a member of the cluster.
-            Default is 0.8.
-        minstars: int, optional
-            Minimum number of stars in each region. Default is 200.
-        racol: str, optional
-            Name of the column containing the RA of the stars. Default is "RA".
-        deccol: str, optional
-            Name of the column containing the DEC of the stars. Default is "DEC".
-        min_star_per_cell: int, optional
-            Minimum number of stars per Voronoi cell. Default is 3.
-        membership_iter: int, optional
-            Number of iterations to perform for the membership calculation.
-            Default is 1000.
-        fov_ratio: float, optional
-            Ratio between the instrument FoV and the sub-FoV area.
-            Default is 1.0.
-        roi: list of float or None, optional
-            List containing the vertices of a polygon to use as region of interest
-            for the differential reddening correction.
-            Example: [x1, y1, x2, y2, ..., xn, yn]
-            If None, no region of interest will be used. Default is None.
-        plot_dred: bool, optional
-            If True, plot the differential reddening correction results.
-            Default is False.
-        plot_voronoi: bool, optional
-            If True, plot the Voronoi grid used for the membership calculation.
-            Default is False.
-        which_voronoi: str, optional
-            Type of Voronoi grid to use. Options are "standard" and "dilation".
-            Default is "dilation".
-        do_dilation: bool, optional
-            If True, dilate the Voronoi regions to have at least min_star_per_cell
-            stars in each cell. Default is True.
+    The input dataframes are not modified. The procedure iterates differential reddening
+    correction and CMD decontamination until the median reddening correction falls below
+    the median photometric error (one more iteration is then performed).
 
-    Returns:
-        df_cluster: DataFrame
-            DataFrame containing the cluster stars with the membership and
-            differential reddening corrected magnitudes added.
+    Parameters
+    ----------
+    df_cluster : DataFrame
+        DataFrame containing the cluster stars.
+    df_field : DataFrame
+        DataFrame containing the field stars.
+    target_mag_col : list of str
+        List containing the names of the columns with the magnitudes
+        to use for the target CMD (band1, band2).
+    target_mag_col_error : list of str
+        List containing the names of the columns with the magnitude errors
+        to use for the target CMD (band1, band2).
+    field_mag_col : list of str
+        List containing the names of the columns with the magnitudes
+        to use for the field CMD (band1, band2).
+    dr_params : dict
+        Dictionary containing input parameters for the differential reddening
+        correction. It must contain the following keys:
+
+        - ``'rband1'``: the A(lambda)/A(V) extinction ratio of band1,
+        - ``'rband2'``: the A(lambda)/A(V) extinction ratio of band2,
+        - ``'TO_mag'``: the magnitude of the Turn-off,
+        - ``'TO_color'``: the color of the Turn-off.
+
+        Optional keys are ``'nref'`` (or ``'n_reference_stars'``), the number of
+        reference stars (default 50), and ``'ord_step'``, the bin size in the
+        'ordinate' to calculate the ridge line (default 0.1).
+
+        The keys ``'band1'``, ``'band2'``, ``'xcol'`` and ``'ycol'`` are set by this
+        function (the dictionary is modified in place).
+    parallel_fov : float
+        Area of the parallel (field) FoV in deg^2.
+    member_threshold : float, optional
+        Membership threshold to consider a star as a reference member of the cluster.
+        Default is 0.8.
+    minstars : int, optional
+        Target number of field stars in each spatial region (see
+        :func:`spatial_groupby`). Default is 200.
+    racol : str, optional
+        Name of the column containing the RA of the stars. Default is ``"RA"``.
+    deccol : str, optional
+        Name of the column containing the DEC of the stars. Default is ``"DEC"``.
+    min_star_per_cell : int, optional
+        Target median number of stars per Voronoi cell (``target_median`` of
+        :class:`CVTGrid`). Default is 3.
+    membership_iter : int, optional
+        Number of iterations to perform for the membership calculation
+        (used by the ``"montecarlo"`` method). Default is 1000.
+    roi : list of tuple of float or shapely.Polygon or None, optional
+        Region of interest for the differential reddening correction, given as the
+        polygon vertices (or the polygon) in the rotated (abscissa, ordinate) CMD plane.
+        If None, an interactive selection window is opened. Default is None.
+    plot_dred : bool, optional
+        If True, plot the differential reddening correction results.
+        Default is False.
+    plot_voronoi : bool, optional
+        If True, plot the Voronoi grid used for the membership calculation.
+        Default is False.
+    which_voronoi : {"dilation", "wkmeans"}, optional
+        Type of Voronoi grid to use: ``"dilation"`` (Lloyd-relaxed CVT, optionally
+        dilated) or ``"wkmeans"`` (CVT seeded with weighted k-means).
+        Default is ``"dilation"``.
+    do_dilation : bool, optional
+        If True, merge neighbouring Voronoi cells until the median number of stars per
+        cell reaches ``min_star_per_cell`` (only for ``which_voronoi="dilation"``).
+        Default is True.
+    membership_method : {"analytical", "montecarlo"}, optional
+        Method to compute the membership probability. Default is ``"analytical"``.
+
+    Returns
+    -------
+    DataFrame
+        Copy of ``df_cluster`` with the columns ``membership``, ``delta_ebv`` and the
+        differential-reddening corrected magnitudes (``<band>_drcorr``) added.
     """
     # make a copy to preserve the original dataframe
     df_cluster = df_cluster.copy()

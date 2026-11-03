@@ -108,9 +108,9 @@ def _cvt_vor(
     iters : int
         Number of Lloyd relaxation iterations.
     padx : float, optional
-        Padding in x direction, by default 0.01.
+        Padding in x direction. Default is 0.01.
     pady : float, optional
-        Padding in y direction, by default 0.01.
+        Padding in y direction. Default is 0.01.
 
     Returns
     -------
@@ -290,18 +290,38 @@ class CVTGrid:
     ----------
     points : NDArray
         Points to tessellate (N, 2).
-    which : str, optional
-        Tessellation mode: "dilation" or "wkmeans", by default "dilation".
+    which : {"dilation", "wkmeans"}, optional
+        Tessellation mode: "dilation" or "wkmeans". Default is "dilation".
     iter : int, optional
-        Lloyd relaxation iterations, by default 3.
+        Lloyd relaxation iterations. Default is 3.
     padx : float, optional
-        X-axis bounding box padding, by default 0.01.
+        X-axis bounding box padding. Default is 0.01.
     pady : float, optional
-        Y-axis bounding box padding, by default 0.01.
+        Y-axis bounding box padding. Default is 0.01.
     dilate : bool, optional
-        Whether to dilate cells to meet minimum star counts, by default False.
+        Whether to dilate cells to meet minimum star counts. Default is False.
     target_median : int, optional
-        Median number of stars per cell threshold for dilation, by default 3.
+        Median number of stars per cell threshold for dilation. Default is 3.
+
+    Attributes
+    ----------
+    which : str
+        Tessellation mode used.
+    points : NDArray
+        Input points that were tessellated.
+    cvor : scipy.spatial.Voronoi
+        Underlying Voronoi diagram.
+    cpoints : NDArray
+        Generators / cell centroids.
+    grid : NDArray
+        Array of Shapely Polygon objects defining the Voronoi cells.
+    dilated_grid : list of Polygon or None
+        Merged/dilated Voronoi cells if dilation was requested, None otherwise.
+
+    Raises
+    ------
+    ValueError
+        If ``which`` is not ``"dilation"`` or ``"wkmeans"``.
     """
 
     def __init__(

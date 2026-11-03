@@ -1,6 +1,7 @@
 """MGCS_pytools: Scientific Python tools for the Missing Globular Cluster Survey (MGCS).
 
 Subpackages:
+
 - mcmc: Kinematic Markov Chain Monte Carlo (MCMC) mixture modeling of Proper Motions.
 - statistical_membership: Voronoi CVT spatial membership & differential reddening correction.
 - utils: Visualization and plotting utilities.
