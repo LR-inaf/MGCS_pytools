@@ -38,3 +38,7 @@ htmlcov/
 .astropy_cache/
 .mpl_config/
 *.png
+
+# Sphinx documentation build outputs
+src/mgcs_pytools/_docs_html/
+docs/build/

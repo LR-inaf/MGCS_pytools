@@ -22,6 +22,8 @@ if "MPLCONFIGDIR" not in os.environ:
     os.makedirs(_default_mpl, exist_ok=True)
     os.environ["MPLCONFIGDIR"] = _default_mpl
 
+from typing import Any
+
 from . import mcmc, statistical_membership, utils
 from .utils import plotting
 
@@ -32,5 +34,16 @@ __all__ = [
     "statistical_membership",
     "utils",
     "plotting",
+    "open_docs",
+    "get_docs_path",
     "__version__",
 ]
+
+
+def __getattr__(name: str) -> Any:
+    """Lazy-load documentation helpers on demand."""
+    if name in ("open_docs", "get_docs_path"):
+        from . import docs
+
+        return getattr(docs, name)
+    raise AttributeError(f"module {__name__!r} has no attribute {name!r}")

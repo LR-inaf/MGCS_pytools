@@ -32,6 +32,12 @@ dependencies = [
 numba = [
     "numba>=0.59.0",
 ]
+docs = [
+    "sphinx>=7.0.0",
+    "sphinx-rtd-theme>=2.0.0",
+    "sphinx-copybutton>=0.5.2",
+    "myst-parser>=2.0.0",
+]
 dev = [
     "pytest>=8.0.0",
     "pytest-cov>=4.1.0",
@@ -39,8 +45,14 @@ dev = [
     "mypy>=1.10.0",
 ]
 
+[project.scripts]
+mgcs-docs = "mgcs_pytools.docs:open_docs_cli"
+
 [tool.setuptools]
 package-dir = {"" = "src"}
+
+[tool.setuptools.package-data]
+"mgcs_pytools" = ["_docs_html/**/*"]
 
 [tool.setuptools.packages.find]
 where = ["src"]
