@@ -22,3 +22,9 @@ MCMC Diagnostics & Vector Point Diagrams
 .. autofunction:: mgcs_pytools.utils.plotting.plot_corner
 .. autofunction:: mgcs_pytools.utils.plotting.plot_vpd_and_mdist_component
 .. autofunction:: mgcs_pytools.utils.plotting.univar_norm_pdf
+
+Offline Documentation Utilities (``mgcs_pytools.docs``)
+=======================================================
+
+.. automodule:: mgcs_pytools.docs
+   :members: open_docs, get_docs_path, build_docs, open_docs_cli

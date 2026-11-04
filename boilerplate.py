@@ -1,7 +1,13 @@
 # Example pipeline boilerplate for MGCS_pytools
 import os
 
+import astropy.units as u  # noqa: F401
 import numpy as np
+import pandas as pd  # noqa: F401
+from astropy.coordinates import SkyCoord  # noqa: F401
+
+from mgcs_pytools.statistical_membership import compute_statistical_membership  # noqa: F401
+from mgcs_pytools.utils import plotting as utplot  # noqa: F401
 
 # 1. Import cluster and parallel field catalogs
 CATALOG_PATH_CLUSTER = os.path.abspath("path_to_cluster_catalog.csv")
@@ -19,8 +25,8 @@ racol = "RA"  # Right Ascension column name
 deccol = "DEC"  # Declination column name
 
 dr_params = {
-    "rband1": 3.1,  # Extinction coefficient in band1
-    "rband2": 2.5,  # Extinction coefficient in band2
+    "rband1": 1.32,  # A(lambda)/A(V) extinction ratio in band1 (multiplied by R_V=3.1 internally)
+    "rband2": 1.00,  # A(lambda)/A(V) extinction ratio in band2 (multiplied by R_V=3.1 internally)
     "TO_mag": 17.5,  # Turn-off magnitude
     "TO_color": 0.9,  # Turn-off color
     "nref": 25,  # Number of reference stars

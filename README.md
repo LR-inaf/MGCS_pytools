@@ -104,8 +104,8 @@ from mgcs_pytools.statistical_membership import compute_statistical_membership
 from mgcs_pytools.utils import plotting as utplot
 
 dr_params = {
-    "rband1": 3.1,  # Extinction coefficient in band 1
-    "rband2": 2.5,  # Extinction coefficient in band 2
+    "rband1": 1.32,  # A(lambda)/A(V) extinction ratio in band 1
+    "rband2": 1.00,  # A(lambda)/A(V) extinction ratio in band 2
     "TO_mag": 17.5,  # Turn-off magnitude
     "TO_color": 0.9,  # Turn-off color
     "nref": 25,  # Number of nearest reference stars

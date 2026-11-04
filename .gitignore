@@ -37,7 +37,11 @@ htmlcov/
 .astropy_config/
 .astropy_cache/
 .mpl_config/
-*.png
+/*.png
+
+# Local agent / MCP state
+.megamemory/
+mcp_config.json
 
 # Sphinx documentation build outputs
 src/mgcs_pytools/_docs_html/
