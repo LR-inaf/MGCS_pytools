@@ -6,6 +6,8 @@ stars, and the median abscissa offset of the nearest reference stars gives the d
 reddening of each star.
 """
 
+import logging
+import warnings
 from typing import List, Optional, Tuple
 
 import matplotlib.pyplot as plt
@@ -13,10 +15,14 @@ import numpy as np
 import pandas as pd
 import shapely
 from scipy.interpolate import CubicSpline
+from scipy.spatial import cKDTree
+from scipy.stats import binned_statistic
 from shapely import (
     Polygon,
     plotting,
 )
+
+logger = logging.getLogger(__name__)
 
 
 class ROISelector:
@@ -291,26 +297,22 @@ def compute_differential_reddening(
     if roi is None:
         # spawn cmd widget to choose box
         myROI = ROISelector(np.vstack((abscissa_ref, ordinate_ref)).T)
-        myROI.start_selection()  # need to be blocking until selection
-        while True:
-            if myROI.points_in is not None:
-                break
+        myROI.start_selection()  # blocks until selection window is closed
+        if myROI.points_in is None or myROI.polygon is None:
+            raise ValueError(
+                "No region of interest (ROI) polygon was selected before closing the window."
+            )
         poli = myROI.polygon
         filter = myROI.points_in
     else:
         poli = Polygon(roi) if not isinstance(roi, Polygon) else roi
         filter = shapely.contains_xy(poli, abscissa_ref, ordinate_ref)
 
-    # _, ax = plt.subplots(layout="constrained")
-    # ax.scatter(abscissa, ordinate, marker=".", s=0.5, lw=0.1, zorder=2)
-    # plotting.plot_polygon(poli, ax=ax, color="gray", alpha=0.5, zorder=3)
-    # plt.show()
     # Define MS stars
     ms_ord = ordinate_ref[filter]
     ms_abs = abscissa_ref[filter]
     ms_x = x_ref[filter]
     ms_y = y_ref[filter]
-    band1_ref[filter]
 
     if len(ms_ord) == 0:
         raise ValueError(
@@ -330,8 +332,6 @@ def compute_differential_reddening(
 
     # Define fiducial line
     # calculate running median in the box and fit on the medians using binned_statistic
-    from scipy.stats import binned_statistic
-
     median_abs, _, _ = binned_statistic(ms_ord, ms_abs, statistic="median", bins=bins)
     median_ord, _, _ = binned_statistic(ms_ord, ms_ord, statistic="median", bins=bins)
 
@@ -397,8 +397,6 @@ def compute_differential_reddening(
         plt.pause(1.0)
 
     ########## STEP 5: search for nearest neighbours ##############
-    from scipy.spatial import cKDTree
-
     # define the set of reference coordinates (to build the tree) and the set of points (to look for k neighbours)
     ref_coord = np.column_stack((ms_x, ms_y))
     points = np.column_stack((x, y))
@@ -406,8 +404,11 @@ def compute_differential_reddening(
     # KDTree
     tree = cKDTree(ref_coord)
 
-    # number of reference stars
-    _, indices = tree.query(points, k=n_ref + 1)
+    # Cap k to the number of available reference stars
+    k_query = min(n_ref + 1, len(ref_coord))
+    _, indices = tree.query(points, k=k_query)
+    if k_query == 1:
+        indices = indices[:, None]
 
     ########## STEP 6: obtain median delta abscissa in the reference stars ##############
     ref_fiducial_line_ord_all = fiducial_line_ord_all[(ms_ord <= ord_max) & (ms_ord >= ord_min)]
@@ -416,19 +417,18 @@ def compute_differential_reddening(
     delta_abscissa = ms_abs - ref_fiducial_line_ord_all
 
     # Pre-index delta_abs_all
-    delta_abs_all = delta_abscissa[indices[:, 1:]]
+    neighbor_indices = indices[:, 1:] if k_query > 1 else indices
+    delta_abs_all = delta_abscissa[neighbor_indices]
 
     # Implement efficient NumPy-vectorized sigma-clipping & median
     medians = np.median(delta_abs_all, axis=1, keepdims=True)
     stds = np.std(delta_abs_all, axis=1, keepdims=True)
 
-    # Create mask for valid elements
-    mask = (delta_abs_all > (medians - 2 * stds)) & (delta_abs_all < (medians + 2 * stds))
+    # Create mask for valid elements (include boundary when std == 0)
+    mask = (delta_abs_all >= (medians - 2 * stds)) & (delta_abs_all <= (medians + 2 * stds))
 
     # Use np.where to replace invalid elements with NaN, then compute nanmedian
     clipped = np.where(mask, delta_abs_all, np.nan)
-
-    import warnings
 
     with warnings.catch_warnings():
         warnings.simplefilter("ignore", category=RuntimeWarning)
@@ -452,7 +452,7 @@ def compute_differential_reddening(
         delta_e_v_band = A_band1_star - A_band2_star
         delta_E_B_V = delta_e_v_band / (rband1 - rband2)
         corr_threshold = 2 * np.std(delta_E_B_V)
-        print(f"correction threshold at: {corr_threshold:.3f}")
+        logger.info(f"correction threshold at: {corr_threshold:.3f}")
         band1 = np.where(
             np.logical_and(np.abs(delta_E_B_V) > corr_threshold, delta_E_B_V_init != 0),
             band1_eval,

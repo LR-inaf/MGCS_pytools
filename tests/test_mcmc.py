@@ -61,6 +61,20 @@ def test_mcmc_sampler_synthetic_data():
 
     # Shape check: (nsteps, nwalkers, ndim)
     assert chain.shape == (5, 12, 6)
+    # Check that rho (index 4) respects the prior bounds [-0.9, -0.5] when narrow bounds are given
+    qmin_narrow = np.array([-5.0, -5.0, 0.1, 0.1, -0.9, 0.0])
+    qmax_narrow = np.array([5.0, 5.0, 5.0, 5.0, -0.5, 1.0])
+    sampler_narrow = MCMCEnsembleSampler(
+        data=data,
+        nwalkers=12,
+        nsteps=2,
+        ncomp=1,
+        par_per_comp=5,
+        qmin=qmin_narrow,
+        qmax=qmax_narrow,
+        pmodel="bivariate_normal",
+    )
+    assert np.all((sampler_narrow.p0[:, 4] >= -0.9) & (sampler_narrow.p0[:, 4] <= -0.5))
 
 
 def test_posterior_fixed_linked():

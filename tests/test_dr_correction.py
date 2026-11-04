@@ -79,3 +79,34 @@ def test_compute_differential_reddening_synthetic():
     assert len(band2_corr) == n_stars
     assert len(d_ebv_corr) == n_stars
     assert poli is not None
+
+
+def test_compute_differential_reddening_unclosed_roi_raises():
+    from unittest.mock import patch
+
+    import pytest
+
+    df = pd.DataFrame(
+        {
+            "x": [0.0, 1.0, 2.0],
+            "y": [0.0, 1.0, 2.0],
+            "band1": [15.0, 16.0, 17.0],
+            "band2": [14.0, 15.0, 16.0],
+            "delta_ebv": [0.0, 0.0, 0.0],
+            "membership": [1.0, 1.0, 1.0],
+        }
+    )
+    params = {
+        "xcol": "x",
+        "ycol": "y",
+        "band1": "band1",
+        "band2": "band2",
+        "rband1": 1.0,
+        "rband2": 0.8,
+        "TO_mag": 15.0,
+        "TO_color": 1.0,
+    }
+
+    with patch.object(ROISelector, "start_selection", return_value=None):
+        with pytest.raises(ValueError, match="No region of interest"):
+            compute_differential_reddening(df, params, roi=None)

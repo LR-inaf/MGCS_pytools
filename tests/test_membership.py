@@ -93,9 +93,12 @@ def test_compute_statistical_membership():
     }
 
     # We patch the dr correction so it converges immediately
-    with patch(
-        "mgcs_pytools.statistical_membership.membership.compute_differential_reddening"
-    ) as mock_dr:
+    with (
+        patch(
+            "mgcs_pytools.statistical_membership.membership.compute_differential_reddening"
+        ) as mock_dr,
+        patch("matplotlib.pyplot.pause"),
+    ):
         mock_dr.return_value = (
             df_cluster["mag1"],
             df_cluster["mag2"],
@@ -115,8 +118,23 @@ def test_compute_statistical_membership():
                 minstars=50,
                 min_star_per_cell=2,
                 membership_iter=10,
+                plot_voronoi=True,
             )
             assert "membership" in res.columns
             assert "delta_ebv" in res.columns
         except Exception as e:
             pytest.fail(f"compute_statistical_membership raised an exception: {e}")
+
+
+def test_get_membership_zero_field_stars_in_cell():
+    # Region 1 has field stars, Region 2 has 0 field stars (absent from cell_counts)
+    cell_counts = [(1, 4)]
+    cell_points = [(1, [0, 1, 2, 3]), (2, [4, 5, 6])]
+    active_regions = [1, 2]
+
+    mem_ana = get_membership(
+        cell_counts, cell_points, active_regions, fov_ratio=0.5, method="analytical"
+    )
+    assert mem_ana.shape == (7, 2)
+    # Stars in region 2 (indices 4, 5, 6) have 0 field stars -> membership must be 1.0
+    np.testing.assert_allclose(mem_ana[4:, 1], 1.0)

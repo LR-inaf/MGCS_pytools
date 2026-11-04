@@ -6,6 +6,7 @@ probability of each star.
 """
 
 import logging
+from typing import Any
 
 import astropy.units as u
 import matplotlib.pyplot as plt
@@ -22,10 +23,6 @@ from .dr_correction import compute_differential_reddening
 from .region_tools import get_pts_in_regions, get_regions_count
 
 logger = logging.getLogger(__name__)
-#
-# !!!!!!!! THIS CODE IS STILL UNDER DEVELOPMENT !!!!!!!!
-#
-#
 
 
 def spatial_groupby(
@@ -173,7 +170,7 @@ def spatial_groupby(
 
 def get_membership(
     cell_counts: list[tuple[int, int]],
-    cell_points: list[tuple[int, list[Point]]],
+    cell_points: list[tuple[int, list[int]]],
     common_regions: list[int],
     iter: int = 1000,
     fov_ratio: float = 1.0,
@@ -190,8 +187,8 @@ def get_membership(
         List of tuples containing the region id and the positional indices of the
         cluster stars in that region.
     common_regions : list of int
-        List of region ids that are common between the field and cluster
-        stars.
+        List of region ids to evaluate (if a region is missing from ``cell_counts``,
+        its field star count defaults to 0).
     iter : int, optional
         Number of iterations to perform if using montecarlo. Default is 1000.
     fov_ratio : float, optional
@@ -222,10 +219,15 @@ def get_membership(
     field_counts_rescaled = []
 
     for rid in common_regions:
+        if rid not in cell_points_dict:
+            continue
         pts = cell_points_dict[rid]
         target_counts.append(len(pts))
-        field_counts_rescaled.append(cell_counts_dict[rid] * fov_ratio)
+        field_counts_rescaled.append(cell_counts_dict.get(rid, 0) * fov_ratio)
         pts_all.extend(pts)
+
+    if len(pts_all) == 0:
+        return np.empty((0, 2), dtype=float)
 
     pts_all_arr = np.array(pts_all)
     target_counts_arr = np.array(target_counts)
@@ -235,7 +237,7 @@ def get_membership(
         membership_probs = np.zeros(len(pts_all_arr))
 
         idx_offset = 0
-        for i in range(len(common_regions)):
+        for i in range(len(target_counts_arr)):
             tc = target_counts_arr[i]
             if tc > 0:
                 prob = max(0.0, 1.0 - field_counts_rescaled_arr[i] / tc)
@@ -248,7 +250,7 @@ def get_membership(
     p = field_counts_rescaled_arr % 1
     bias = field_counts_rescaled_arr.astype(int)
 
-    N_cells = len(common_regions)
+    N_cells = len(target_counts_arr)
     N_stars = len(pts_all_arr)
     star_retention_counts = np.zeros(N_stars, dtype=int)
 
@@ -286,7 +288,7 @@ def compute_statistical_membership(
     target_mag_col: list[str],
     target_mag_col_error: list[str],
     field_mag_col: list[str],
-    dr_params: dict[str, str],
+    dr_params: dict[str, Any],
     parallel_fov: float,
     member_threshold: float = 0.8,
     minstars: int = 200,
@@ -294,12 +296,13 @@ def compute_statistical_membership(
     deccol: str = "DEC",
     min_star_per_cell: int = 3,
     membership_iter: int = 1000,
-    roi: list[float] | None = None,
+    roi: Any = None,
     plot_dred: bool = False,
     plot_voronoi: bool = False,
     which_voronoi: str = "dilation",
     do_dilation: bool = True,
     membership_method: str = "analytical",
+    max_iter: int = 20,
 ) -> DataFrame:
     """Compute the statistical membership of stars in a cluster field.
 
@@ -375,6 +378,9 @@ def compute_statistical_membership(
         Default is True.
     membership_method : {"analytical", "montecarlo"}, optional
         Method to compute the membership probability. Default is ``"analytical"``.
+    max_iter : int, optional
+        Maximum number of differential reddening and decontamination iterations.
+        Default is 20.
 
     Returns
     -------
@@ -401,10 +407,12 @@ def compute_statistical_membership(
 
     fov_ratio = [subfov.area / parallel_fov for subfov in subfovs]
 
-    field_pts = [
-        Point(row[field_mag_col[0]] - row[field_mag_col[1]], row[field_mag_col[0]])
-        for _, row in df_field.iterrows()
-    ]
+    field_pts = np.column_stack(
+        (
+            df_field[field_mag_col[0]].values - df_field[field_mag_col[1]].values,
+            df_field[field_mag_col[0]].values,
+        )
+    )
 
     # initialize the cluster columns for membership and differential reddening
     dr_band1_corr = target_mag_col[0] + "_drcorr"
@@ -502,9 +510,9 @@ def compute_statistical_membership(
             logger.info(f"\t#### GROUP N.{i + 1} ####")
 
             # Voronoi grid creation
-            xg = group[dr_band1_corr] - group[dr_band2_corr]
-            yg = group[dr_band1_corr]
-            cluster_pts = [Point(x, y) for x, y in zip(xg, yg)]
+            xg = group[dr_band1_corr].values - group[dr_band2_corr].values
+            yg = group[dr_band1_corr].values
+            cluster_pts = np.column_stack((xg, yg))
 
             # dilate regions to have at least n stars in each cell
             if do_dilation:
@@ -520,7 +528,7 @@ def compute_statistical_membership(
                 dilate = False
 
             cvt_grid = cvtGrid(
-                np.array([xg.values, yg.values]).T,
+                cluster_pts,
                 iter=1,
                 dilate=dilate,
                 which=which_voronoi,
@@ -536,45 +544,44 @@ def compute_statistical_membership(
 
             # count field stars in cells
             cell_field_counts = get_regions_count(regions, field_pts)
-            points_in_reigons = get_pts_in_regions(regions, cluster_pts)
+            points_in_regions = get_pts_in_regions(regions, cluster_pts)
 
             if plot_voronoi:
                 _ = utplot.plot_cmd_and_vorgrid(
-                    group,
-                    [dr_band1_corr, dr_band2_corr],
+                    group[dr_band1_corr].values,
+                    group[dr_band2_corr].values,
                     regions,
-                    points_in_reigons,
+                    points_in_regions,
                 )
                 # plt.show(block=False)
                 plt.draw()
                 plt.pause(1.0)
 
-            common_regions = set([el[0] for el in cell_field_counts]).intersection(
-                set([el[0] for el in points_in_reigons])
-            )
+            active_regions = [el[0] for el in points_in_regions]
 
             # add membership
             membership = get_membership(
                 cell_field_counts,
-                points_in_reigons,
-                list(common_regions),
+                points_in_regions,
+                active_regions,
                 membership_iter,
                 fovr,
                 method=membership_method,
             )
 
-            logger.info(
-                f"\tMembership (mean, min, max): "
-                f"({membership[:, 1].mean():.4f},"
-                f" {membership[:, 1].min():.4f},"
-                f" {membership[:, 1].max():.4f})\n\n"
-            )
+            if len(membership) > 0:
+                logger.info(
+                    f"\tMembership (mean, min, max): "
+                    f"({membership[:, 1].mean():.4f},"
+                    f" {membership[:, 1].min():.4f},"
+                    f" {membership[:, 1].max():.4f})\n\n"
+                )
 
-            df_cluster.loc[cluster_ids[membership[:, 0].astype(int)], "membership"] = membership[
-                :, 1
-            ]
+                df_cluster.loc[cluster_ids[membership[:, 0].astype(int)], "membership"] = (
+                    membership[:, 1]
+                )
 
-        if it == it_stop:
+        if it == it_stop or it + 1 >= max_iter:
             break
 
         if abs(float(np.median(EBV))) < abs(photometric_error) and it > 0:

@@ -227,7 +227,7 @@ def show_cmds_with_voronoi(
         show_vertices=False,
         show_points=False,
         line_colors="orange",
-        line_aplha=0.5,
+        line_alpha=0.5,
         line_width=0.5,
     )
 
@@ -241,7 +241,7 @@ def show_cmds_with_voronoi(
 
 def _plot_grid_with_counts(
     ax: mpl.axes.Axes,
-    regions: list[Polygon],
+    regions: list[Polygon] | NDArray,
     pts_in_regions: list[tuple],
     cmap: str = "viridis",
 ):
@@ -251,7 +251,7 @@ def _plot_grid_with_counts(
     ----------
     ax : matplotlib.axes.Axes
         The axes to plot on.
-    regions : list of Polygon
+    regions : list of Polygon or NDArray
         The Voronoi regions.
     pts_in_regions : list of tuple
         The ``(region_id, points)`` pairs with the points in each region.
@@ -260,9 +260,11 @@ def _plot_grid_with_counts(
     """
     max_number = max([len(pts) for _, pts in pts_in_regions]) if pts_in_regions else 1
     cmap_obj = mpl.colormaps[cmap] if isinstance(cmap, str) else cmap
-    colors = [cmap_obj(len(pts) / max_number) for _, pts in pts_in_regions]
+    counts_by_region = {int(rid): len(pts) for rid, pts in pts_in_regions}
 
-    for poli, color in zip(regions, colors):
+    for rid, poli in enumerate(regions):
+        count = counts_by_region.get(rid, 0)
+        color = cmap_obj(count / max_number) if max_number > 0 else cmap_obj(0.0)
         plotting.plot_polygon(
             poli,
             ax=ax,
@@ -435,8 +437,6 @@ def plot_decontamination_snapshot(
     ax_decon.set(xlim=ax_cluster.get_xlim(), ylim=ax_cluster.get_ylim())
     ax_rej.set(xlim=ax_cluster.get_xlim(), ylim=ax_cluster.get_ylim())
     ax_field.set(xlim=ax_cluster.get_xlim(), ylim=ax_cluster.get_ylim())
-    return fig
-
     return fig
 
 

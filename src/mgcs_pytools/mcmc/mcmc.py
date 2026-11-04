@@ -154,13 +154,34 @@ class MCMCEnsembleSampler:
                 self.p0: NDArray = np.array(
                     [np.random.uniform(self.qmin, self.qmax) for _ in range(self.nwalkers)]
                 )
+                # Ensure mixture weights sum to <= 1.0 when multiple components are used
+                if self.ncomp == 2:
+                    self.p0[:, -1] = np.clip(
+                        np.random.uniform(0.2, 0.8, size=self.nwalkers),
+                        self.qmin[-1],
+                        self.qmax[-1],
+                    )
+                elif self.ncomp == 3:
+                    self.p0[:, -2] = np.clip(
+                        np.random.uniform(0.3, 0.6, size=self.nwalkers),
+                        self.qmin[-2],
+                        self.qmax[-2],
+                    )
+                    self.p0[:, -1] = np.clip(
+                        np.random.uniform(0.0, 0.3, size=self.nwalkers),
+                        self.qmin[-1],
+                        self.qmax[-1],
+                    )
+                elif self.ncomp > 3:
+                    n_weights = self.ncomp - 1
+                    dirichlet_w = np.random.dirichlet(np.ones(self.ncomp), size=self.nwalkers)
+                    self.p0[:, -n_weights:] = np.clip(
+                        dirichlet_w[:, :n_weights],
+                        self.qmin[-n_weights:],
+                        self.qmax[-n_weights:],
+                    )
             else:
                 self.p0 = p0
-
-            # Setting some uniform variables based on old code expectation
-            if p0 is None and self.p0.shape[1] >= 2:
-                self.p0[:, -2] = np.random.uniform(0.3, 0.6, size=self.nwalkers)
-                self.p0[:, -1] = np.random.uniform(0.0, 0.3, size=self.nwalkers)
 
             self.bpars = None
 
@@ -209,7 +230,13 @@ class MCMCEnsembleSampler:
             If the sampler was loaded from a previous run and cannot be run again.
         """
         if isinstance(self.sampler, emcee.EnsembleSampler):
-            self.sampler.run_mcmc(self.p0, self.nsteps, progress=True)
+            try:
+                self.sampler.run_mcmc(self.p0, self.nsteps, progress=True)
+            finally:
+                if self.pool is not None:
+                    self.pool.close()
+                    self.pool.join()
+                    self.pool = None
         else:
             raise TypeError("Sampler is not an EnsembleSampler, cannot run MCMC.")
 
