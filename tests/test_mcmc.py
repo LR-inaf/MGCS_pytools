@@ -1,0 +1,144 @@
+import numpy as np
+
+from mgcs_pytools.mcmc.bivariate_normal import _lnprior, _logl, bivariate_normal_pdf
+from mgcs_pytools.mcmc.mcmc import MCMCEnsembleSampler
+from mgcs_pytools.mcmc.set_posterior import posterior
+
+
+def test_bivariate_normal_pdf():
+    # Simple check on center (x1=mu1, x2=mu2)
+    pdf_val = bivariate_normal_pdf(0.0, 0.0, 0.0, 0.0, 1.0, 1.0, 0.0)
+    expected = 1.0 / (2.0 * np.pi)
+    np.testing.assert_allclose(pdf_val, expected, rtol=1e-5)
+
+
+def test_logl():
+    data = np.array([[0.0, 0.0, 0.1, 0.1], [1.0, 1.0, 0.1, 0.1]])
+    prm = np.array([0.0, 0.0, 1.0, 1.0, 0.0, 1.0, 1.0, 1.0, 1.0, 0.0, 0.5])
+    ll = _logl(data, prm, component=2, stride=5)
+    assert not np.isnan(ll)
+    assert not np.isinf(ll)
+
+
+def test_lnprior():
+    prm = np.array([0.5, 0.5, 0.5, 0.5, 0.0, 0.5])
+    qmin = np.array([-1.0, -1.0, 0.1, 0.1, -0.9, 0.0])
+    qmax = np.array([1.0, 1.0, 2.0, 2.0, 0.9, 1.0])
+
+    # Within limits
+    val = _lnprior(prm, qmin, qmax, 2)
+    assert val == 0.0
+
+    # Outside limits
+    prm_bad = np.array([2.0, 0.5, 0.5, 0.5, 0.0, 0.5])
+    val_bad = _lnprior(prm_bad, qmin, qmax, 2)
+    assert val_bad == -np.inf
+
+
+def test_mcmc_sampler_synthetic_data():
+    np.random.seed(42)
+    data = np.random.randn(10, 4)
+    data[:, 2:] = 0.1  # error
+
+    # Needs to match ncomp=1 parameters: [mu1, mu2, s1, s2, rho, w] (since mcmc.py defaults to +1 parameters with weights even if component=1)
+    # The ndim computation is: ((1 * 5) + 1 = 6 parameters).
+    qmin = np.array([-5.0, -5.0, 0.1, 0.1, -0.9, 0.0])
+    qmax = np.array([5.0, 5.0, 5.0, 5.0, 0.9, 1.0])
+
+    sampler = MCMCEnsembleSampler(
+        data=data,
+        nwalkers=12,
+        nsteps=5,
+        ncomp=1,
+        par_per_comp=5,
+        qmin=qmin,
+        qmax=qmax,
+        pmodel="bivariate_normal",
+    )
+
+    sampler.run_emcee()
+    chain = sampler.get_chain()
+
+    # Shape check: (nsteps, nwalkers, ndim)
+    assert chain.shape == (5, 12, 6)
+    # Check that rho (index 4) respects the prior bounds [-0.9, -0.5] when narrow bounds are given
+    qmin_narrow = np.array([-5.0, -5.0, 0.1, 0.1, -0.9, 0.0])
+    qmax_narrow = np.array([5.0, 5.0, 5.0, 5.0, -0.5, 1.0])
+    sampler_narrow = MCMCEnsembleSampler(
+        data=data,
+        nwalkers=12,
+        nsteps=2,
+        ncomp=1,
+        par_per_comp=5,
+        qmin=qmin_narrow,
+        qmax=qmax_narrow,
+        pmodel="bivariate_normal",
+    )
+    assert np.all((sampler_narrow.p0[:, 4] >= -0.9) & (sampler_narrow.p0[:, 4] <= -0.5))
+
+
+def test_posterior_fixed_linked():
+    data = np.array([[0.0, 0.0, 0.1, 0.1]])
+
+    prm = np.array([0.0, 0.0, 1.0, 1.0, 0.0, 1.0])
+    qmin = np.array([-1.0, -1.0, 0.1, 0.1, -0.9, 0.0])
+    qmax = np.array([1.0, 1.0, 2.0, 2.0, 0.9, 1.0])
+
+    # Test posterior basic
+    p_val1 = posterior(prm, data, qmin, qmax, component=1)
+    assert not np.isinf(p_val1)
+
+    # Fixed param
+    fix_params = np.array([np.nan, np.nan, 2.0, np.nan, np.nan, np.nan])
+    p_val2 = posterior(prm, data, qmin, qmax, component=1, fix_params=fix_params)
+    assert p_val1 != p_val2
+
+    # Linked param (e.g. sigma2 = sigma1)
+    lnk_params = np.array([[2, 3]])
+    p_val3 = posterior(prm, data, qmin, qmax, component=1, lnk_params=lnk_params)
+    assert p_val1 == p_val3  # because prm has sigma1=1.0 and sigma2=1.0 anyway
+
+    # Change original slightly to see link effect
+    prm_diff = np.array([0.0, 0.0, 1.5, 1.0, 0.0, 1.0])
+    p_val4 = posterior(prm_diff, data, qmin, qmax, component=1, lnk_params=lnk_params)
+
+    # Now evaluating with prm=[0,0,1.5,1.5,0] vs not linked [0,0,1.5,1.0,0]
+    p_val5 = posterior(prm_diff, data, qmin, qmax, component=1)
+    assert p_val4 != p_val5
+
+
+def test_component_membership_chain_calculation():
+    from mgcs_pytools.mcmc.utils import get_component_membership_from_mcmc_chain
+
+    np.random.seed(42)
+    # mock chain: 20 iterations, 2 components: 5 params each + 1 weight = 11 params
+    ch = np.zeros((20, 11))
+    ch[:, 0] = 0.0  # mu1_c1
+    ch[:, 1] = 0.0  # mu2_c1
+    ch[:, 2] = 0.5  # s1_c1
+    ch[:, 3] = 0.5  # s2_c1
+    ch[:, 4] = 0.0  # rho_c1
+
+    ch[:, 5] = 2.0  # mu1_c2
+    ch[:, 6] = 2.0  # mu2_c2
+    ch[:, 7] = 1.0  # s1_c2
+    ch[:, 8] = 1.0  # s2_c2
+    ch[:, 9] = 0.0  # rho_c2
+
+    ch[:, 10] = 0.5  # weight component 1
+
+    # Star 1 at (0, 0) should be mostly component 0
+    # Star 2 at (2, 2) should be mostly component 1
+    data = np.array(
+        [
+            [0.0, 0.0, 0.05, 0.05],
+            [2.0, 2.0, 0.05, 0.05],
+        ]
+    )
+
+    mem = get_component_membership_from_mcmc_chain(ch, data, ncomp=2, par_per_comp=5, batch_size=10)
+    assert mem.shape == (2, 2)
+    assert mem[0, 0] > 0.8  # Star 1 in comp 0
+    assert mem[1, 1] > 0.8  # Star 2 in comp 1
+    # Probabilities should sum to 1.0 per star
+    np.testing.assert_allclose(np.sum(mem, axis=0), [1.0, 1.0], atol=1e-5)

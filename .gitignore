@@ -1,2 +1,48 @@
+# Byte-compiled / optimized / DLL files
 __pycache__/
-*.pyc
+*.py[cod]
+*$py.class
+
+# Distribution / packaging
+dist/
+build/
+*.egg-info/
+*.egg
+
+# Virtual environments
+.venv/
+env/
+venv/
+ENV/
+
+# Testing and coverage
+.pytest_cache/
+.coverage
+htmlcov/
+
+# Type checking and linting
+.mypy_cache/
+.ruff_cache/
+
+# MCMC data and checkpoints
+*.h5
+*.hdf5
+
+# IDE & Editor artifacts
+.vscode/
+.idea/
+*.swp
+*.swo
+
+.astropy_config/
+.astropy_cache/
+.mpl_config/
+/*.png
+
+# Local agent / MCP state
+.megamemory/
+mcp_config.json
+
+# Sphinx documentation build outputs
+src/mgcs_pytools/_docs_html/
+docs/build/

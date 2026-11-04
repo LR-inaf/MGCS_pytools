@@ -1,57 +1,109 @@
-import numpy as np
-from numpy.typing import NDArray
+"""Wrapper around :mod:`emcee` to run ensemble MCMC fits of mixture models."""
+
+import multiprocessing
+from typing import Any
 
 import emcee
+import numpy as np
 from emcee.backends import HDFBackend
-from multiprocessing import Pool
+from numpy.typing import NDArray
 
 from .set_posterior import posterior
 
 
-class MyEmceeES:
+class MCMCEnsembleSampler:
     """Class to run MCMC with emcee.
 
-    This class is particularly design to use multivariate fuctions as posterior,
-    but it can be genewralized to work with any function.
-    It can managed one or more gaussian components
-    and their parameters can be either linked of freezed.
+    This class is particularly designed to use multivariate functions as posterior,
+    but it can be generalized to work with any function.
+    It can manage one or more Gaussian components
+    and their parameters can be either linked or frozen.
 
-    Args:
-        data: `NDArray`
-            Data to fit.
-        posterior: `callable`
-            Posterior function to use in the mcmc to compute the loglike.
-        nwalkers: `int`
-            Number of walkers initialized in the MCMC.
-        nsteps: `int`
-            Number of steps to run.
-        ncomp: `int`
-            Number of model components to use.
-        par_per_comp: `int`
-            Number of parameters per component.
-        qmin: `NDArray`
-            Lower limits for priors.
-        qmax: `NDArray`
-            Upper limits for priors.
-        p0: `NDArray`  or `None`, optional
-            Initial guess for the parameters.
-            If `None`, uniform distribution between qmin and qmax will be used. Defult is `None`.
-        fix_params: `NDArray` or `None`, optional
-            Array containing the fixed parameters. If None, no parameters will be fixed. Defaul is `None`
-        lnk_params: `NDArray` or `None`, optional
-            Array containing the linked parameters. If None, no parameters will be linked together.
-            Defaul is `None`
-        save_chains: `bool`, optional
-            If True, the chains will be saved in an HDF5 file. Default is False.
-        hdf_filename: `str`, optional
-            Name of the HDF5 file to save the chains. Default is "mcmc_chains.h5".
-        parallel: `bool`, optional
-            If True, use multiprocessing to run the MCMC on multiple processor.
-            If False, run the MCMC in a single process. Default is False.
-        from_previous_run: `bool`, optional
-            If True, load a previous MCMC run from an HDF5 file. Default is False.
-        hdf_backend_kwargs: `dict` or `None`, optional
-            Dictionary containing the parameters to use for the HDFBackend.
+    Parameters
+    ----------
+    data : NDArray or None, optional
+        Data to fit.
+    nwalkers : int or None, optional
+        Number of walkers initialized in the MCMC.
+        Required unless ``from_previous_run`` is True.
+    nsteps : int or None, optional
+        Number of steps to run. Required unless ``from_previous_run`` is True.
+    ncomp : int or None, optional
+        Number of model components to use. Required unless ``from_previous_run`` is True.
+    par_per_comp : int or None, optional
+        Number of parameters per component.
+        Required unless ``from_previous_run`` is True.
+    qmin : NDArray or None, optional
+        Lower limits for priors.
+    qmax : NDArray or None, optional
+        Upper limits for priors.
+    pmodel : str or None, optional
+        Model used by the posterior (see :func:`mgcs_pytools.mcmc.posterior`).
+        Currently only ``"bivariate_normal"`` is supported; None raises a ``ValueError``
+        at the first evaluation of the posterior.
+    p0 : NDArray or None, optional
+        Initial guess for the parameters.
+        If None, a uniform distribution between ``qmin`` and ``qmax`` will be used,
+        except for the last two parameters (the mixture weights), which are initialised
+        in U(0.3, 0.6) and U(0, 0.3).
+        Default is None.
+    fix_params : NDArray or None, optional
+        Array containing the fixed parameters. If None, no parameters will be fixed.
+        Default is None.
+    lnk_params : NDArray or None, optional
+        Array containing the linked parameters. If None, no parameters will be linked together.
+        Default is None.
+    save_chains : bool, optional
+        If True, the chains will be saved in an HDF5 file. Default is False.
+    hdf_filename : str, optional
+        Name of the HDF5 file to save the chains. Default is ``"mcmc_chains.h5"``.
+    parallel : bool, optional
+        If True, use multiprocessing to run the MCMC on multiple processors.
+        If False, run the MCMC in a single process. Default is False.
+    from_previous_run : bool, optional
+        If True, load a previous MCMC run from an HDF5 file; all the other arguments
+        except ``hdf_backend_kwargs`` are then ignored. Default is False.
+    hdf_backend_kwargs : dict or None, optional
+        Dictionary containing the parameters to use for the HDFBackend.
+
+    Attributes
+    ----------
+    data : NDArray or None
+        Input dataset to fit.
+    pmodel : str or None
+        Posterior model identifier.
+    nwalkers : int
+        Number of ensemble walkers.
+    nsteps : int
+        Number of MCMC steps.
+    ncomp : int
+        Number of mixture components.
+    par_per_comp : int
+        Number of parameters per component.
+    ndim : int
+        Total dimensionality of the parameter space.
+    qmin : NDArray or None
+        Lower parameter bounds for priors.
+    qmax : NDArray or None
+        Upper parameter bounds for priors.
+    p0 : NDArray
+        Initial positions of walkers.
+    fix_params : NDArray or None
+        Array of fixed parameter values.
+    lnk_params : NDArray or None
+        Array of parameter link specifications.
+    pool : Any
+        Multiprocessing pool if parallel is True, else None.
+    sampler : emcee.EnsembleSampler or emcee.backends.HDFBackend
+        Underlying emcee sampler or backend instance.
+    from_previous_run : bool
+        Whether state was restored from a previous run file.
+
+    Raises
+    ------
+    ValueError
+        If the required sampler settings are missing, or if neither ``p0`` nor
+        ``qmin``/``qmax`` are provided.
     """
 
     def __init__(
@@ -72,53 +124,78 @@ class MyEmceeES:
         parallel: bool = False,  # TODO: now with parallel is slower!
         from_previous_run: bool = False,
         hdf_backend_kwargs: dict | None = None,
-    ):
-        self.from_previous_run = from_previous_run
+    ) -> None:
+        self.from_previous_run: bool = from_previous_run
         if not self.from_previous_run:
-            self.data = data
-            self.pmodel = pmodel
-            self.nwalkers = nwalkers
-            self.nsteps = nsteps
-            self.ncomp = ncomp
-            self.par_per_comp = par_per_comp
-            self.ndim = (
-                (ncomp * par_per_comp) + ncomp - 1
-                if self.ncomp > 1
-                else (ncomp * par_per_comp) + ncomp
-            )
-            self.qmin = qmin
-            self.qmax = qmax
-            self.fix_params = fix_params
-            self.lnk_params = lnk_params
-            self.chain = None
-
-            self.p0 = (
-                np.array(
-                    [
-                        np.random.uniform(self.qmin, self.qmax)
-                        for _ in range(self.nwalkers)
-                    ]
+            if ncomp is None or par_per_comp is None or nwalkers is None or nsteps is None:
+                raise ValueError(
+                    "Must provide ncomp, par_per_comp, nwalkers and nsteps if from_previous_run is False"
                 )
-                if p0 is None
-                else p0
+            self.data: NDArray | None = data
+            self.pmodel: str | None = pmodel
+            self.nwalkers: int = nwalkers
+            self.nsteps: int = nsteps
+            self.ncomp: int = ncomp
+            self.par_per_comp: int = par_per_comp
+            self.ndim: int = (
+                (self.ncomp * self.par_per_comp) + self.ncomp - 1
+                if self.ncomp > 1
+                else (self.ncomp * self.par_per_comp) + self.ncomp
             )
+            self.qmin: NDArray | None = qmin
+            self.qmax: NDArray | None = qmax
+            self.fix_params: NDArray | None = fix_params
+            self.lnk_params: NDArray | None = lnk_params
+            self.chain: NDArray | None = None
 
-            self.p0[:, -2] = np.random.uniform(0.3, 0.6, size=self.nwalkers)
-            self.p0[:, -1] = np.random.uniform(0.0, 0.3, size=self.nwalkers)
+            if p0 is None:
+                if self.qmin is None or self.qmax is None:
+                    raise ValueError("Must provide qmin and qmax if p0 is not given.")
+                self.p0: NDArray = np.array(
+                    [np.random.uniform(self.qmin, self.qmax) for _ in range(self.nwalkers)]
+                )
+                # Ensure mixture weights sum to <= 1.0 when multiple components are used
+                if self.ncomp == 2:
+                    self.p0[:, -1] = np.clip(
+                        np.random.uniform(0.2, 0.8, size=self.nwalkers),
+                        self.qmin[-1],
+                        self.qmax[-1],
+                    )
+                elif self.ncomp == 3:
+                    self.p0[:, -2] = np.clip(
+                        np.random.uniform(0.3, 0.6, size=self.nwalkers),
+                        self.qmin[-2],
+                        self.qmax[-2],
+                    )
+                    self.p0[:, -1] = np.clip(
+                        np.random.uniform(0.0, 0.3, size=self.nwalkers),
+                        self.qmin[-1],
+                        self.qmax[-1],
+                    )
+                elif self.ncomp > 3:
+                    n_weights = self.ncomp - 1
+                    dirichlet_w = np.random.dirichlet(np.ones(self.ncomp), size=self.nwalkers)
+                    self.p0[:, -n_weights:] = np.clip(
+                        dirichlet_w[:, :n_weights],
+                        self.qmin[-n_weights:],
+                        self.qmax[-n_weights:],
+                    )
+            else:
+                self.p0 = p0
 
             self.bpars = None
 
-            self.pool = None
+            self.pool: Any = None
             if parallel:
-                self.pool = Pool()
+                self.pool = multiprocessing.Pool()
 
-            backend = None
+            backend: HDFBackend | None = None
             if save_chains:
                 backend = emcee.backends.HDFBackend(hdf_filename)
                 backend.reset(nwalkers=self.nwalkers, ndim=self.ndim)
 
             # set the sampler
-            self.sampler = emcee.EnsembleSampler(
+            self.sampler: emcee.EnsembleSampler | HDFBackend = emcee.EnsembleSampler(
                 nwalkers=self.nwalkers,
                 ndim=self.ndim,
                 log_prob_fn=posterior,
@@ -140,28 +217,56 @@ class MyEmceeES:
                 pool=self.pool,
             )
         else:
+            if hdf_backend_kwargs is None:
+                hdf_backend_kwargs = {}
             self.sampler = self.load_mcmc_run(**hdf_backend_kwargs)
 
-    def run_emcee(self):
+    def run_emcee(self) -> None:
         """Run the MCMC using emcee.
 
-        Args:
-            parallel: `bool`, optional
-                If True, use multiprocessing to run the MCMC on multiple processor.
-                If False, run the MCMC in a single process. Default is False.
+        Raises
+        ------
+        TypeError
+            If the sampler was loaded from a previous run and cannot be run again.
         """
-        self.sampler.run_mcmc(self.p0, self.nsteps, progress=True)
+        if isinstance(self.sampler, emcee.EnsembleSampler):
+            try:
+                self.sampler.run_mcmc(self.p0, self.nsteps, progress=True)
+            finally:
+                if self.pool is not None:
+                    self.pool.close()
+                    self.pool.join()
+                    self.pool = None
+        else:
+            raise TypeError("Sampler is not an EnsembleSampler, cannot run MCMC.")
+
+    def get_autocorr_time(self, **kwargs) -> NDArray:
+        """Get the autocorrelation time of the chains.
+
+        Parameters
+        ----------
+        **kwargs
+            Keyword arguments forwarded to emcee's ``get_autocorr_time`` method.
+
+        Returns
+        -------
+        NDArray
+            Autocorrelation time of each dimension.
+        """
+        return self.sampler.get_autocorr_time(**kwargs)
 
     def get_chain(self, **kwargs) -> NDArray:
         """Get the chain of samples.
 
-        Args:
-            kwargs:
-                Parameters of get_chain emcee's method (*thin*, *flat*, *discard*).
+        Parameters
+        ----------
+        **kwargs
+            Keyword arguments of emcee's ``get_chain`` method (``thin``, ``flat``, ``discard``).
 
-        Returns:
-            chain: `NDArray`
-                Chain of samples.
+        Returns
+        -------
+        NDArray
+            Chain of samples.
         """
         return self.sampler.get_chain(**kwargs)
 
@@ -170,25 +275,29 @@ class MyEmceeES:
         sampler: emcee.EnsembleSampler | emcee.backends.HDFBackend,
         which: str,
         percentile: list[float] = [16.0, 50.0, 84.0],
-        **kwargs
+        **kwargs,
     ) -> NDArray:
         """Obtain the model parameters from the chain.
 
-        Args:
-            sampler: `EnsembleSampler` or `HDFBackend`
-                Emcee sampler object containing the MCMC run.
-            which: `str`
-                How to retrieve the model parameter.
-                - *percentiles*: the parameters will be returned at the specified percentiles.
-                - *maxln*: the parameters that represent the maximum loglikelihood.
-            percentile: `list` of `float`, optional
-                Percentiles to use, default are [16., 50., 84.].
-            kwargs:
-                Parameters of get_chain and get_log_prob emcee methods (*thin*, *flat*, *discard*).
+        Parameters
+        ----------
+        sampler : emcee.EnsembleSampler or emcee.backends.HDFBackend
+            Emcee sampler object containing the MCMC run.
+        which : str
+            How to retrieve the model parameters:
 
-        Returns:
-            pars: `NDArray`
-                Parameters set from the chain.
+            - ``"maxln"``: the parameters that maximize the log-probability.
+            - any other value: the parameters at the requested ``percentile`` values.
+        percentile : list of float, optional
+            Percentiles to use, default are [16., 50., 84.].
+        **kwargs
+            Keyword arguments of emcee's ``get_chain`` and ``get_log_prob`` methods
+            (``thin``, ``flat``, ``discard``).
+
+        Returns
+        -------
+        NDArray
+            Parameters set from the chain.
         """
         if which == "maxln":
             maxln = sampler.get_log_prob(**kwargs).argmax()
@@ -200,12 +309,14 @@ class MyEmceeES:
     def load_mcmc_run(**kwargs) -> HDFBackend:
         """Load a previous MCMC run saved in an HDF5 file.
 
-        Args:
-            kwargs:
-                Parameters of the HDFBackend emcee's method.
+        Parameters
+        ----------
+        **kwargs
+            Keyword arguments of emcee's ``HDFBackend`` constructor (e.g. ``filename``).
 
-        Returns:
-            backend: `HDFBackend`
-                HDFBackend object containing the MCMC run.
+        Returns
+        -------
+        emcee.backends.HDFBackend
+            HDFBackend object containing the MCMC run.
         """
         return emcee.backends.HDFBackend(**kwargs)

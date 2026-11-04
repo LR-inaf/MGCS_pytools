@@ -12,9 +12,11 @@ jobs:
       - name: Set up Python
         uses: actions/setup-python@v5
         with:
-          python-version: '3.x'
-      - name: Install build dependencies
-        run: pip install build twine
+          python-version: '3.12'
+      - name: Install build and documentation dependencies
+        run: pip install build twine ".[docs]"
+      - name: Build offline HTML documentation
+        run: python -m mgcs_pytools.docs --build
       - name: Build package
         run: python -m build
       - name: Publish package

@@ -1,31 +1,89 @@
+"""Differential reddening correction of a cluster colour-magnitude diagram (CMD).
+
+The CMD is translated to the main-sequence turn-off and rotated so that the reddening
+vector is parallel to the abscissa. A fiducial line is fitted on the reference main-sequence
+stars, and the median abscissa offset of the nearest reference stars gives the differential
+reddening of each star.
+"""
+
+import logging
+import warnings
+from typing import List, Optional, Tuple
+
+import matplotlib.pyplot as plt
 import numpy as np
 import pandas as pd
-import matplotlib.pyplot as plt
-
+import shapely
+from scipy.interpolate import CubicSpline
+from scipy.spatial import cKDTree
+from scipy.stats import binned_statistic
 from shapely import (
     Polygon,
-    Point,
     plotting,
 )
 
-from scipy.interpolate import CubicSpline
-from scipy.spatial import KDTree
+logger = logging.getLogger(__name__)
 
 
-class createROI:
+class ROISelector:
+    """Interactive polygon selector (region of interest) on a 2D scatter plot.
 
-    def __init__(self, points):
+    The instance is registered as the callback of the matplotlib mouse and keyboard
+    events: left click adds a vertex, spacebar closes the polygon, ``c`` cancels it and
+    ``q`` ends the interactive session.
+
+    Parameters
+    ----------
+    points : NDArray
+        Array with shape (N, 2) of the points to select from.
+    vertices : list of tuple of float, optional
+        Initial polygon vertices. If at least three vertices are given, the polygon is
+        built immediately and no interaction is required. Default is None.
+
+    Attributes
+    ----------
+    points : NDArray
+        Array of 2D input points.
+    coords : list of tuple of float
+        Current polygon vertices.
+    polygon : shapely.Polygon or None
+        Selected polygon, None until it has been closed.
+    points_in : NDArray or None
+        Boolean mask of ``points`` lying inside ``polygon``, None until the polygon is closed.
+    ax : matplotlib.axes.Axes or None
+        Matplotlib axes for the selection figure.
+    fig : matplotlib.figure.Figure or None
+        Matplotlib figure for interactive selection.
+    patch : matplotlib.patches.Polygon or None
+        Drawn polygon patch.
+    cid_MOUSE : int or None
+        Event callback connection ID for mouse button events.
+    cid_KEYBOARD : int or None
+        Event callback connection ID for key press events.
+    """
+
+    def __init__(self, points: np.ndarray, vertices: Optional[List[Tuple[float, float]]] = None):
         self.points = points
 
         self.ax = None
         self.fig = None
         self.cid_MOUSE = None
         self.cid_KEYBOARD = None
-        self.coords = []
+        self.coords = vertices if vertices is not None else []
         self.polygon = None
         self.points_in = None
         self.patch = None
 
+        if len(self.coords) >= 3:
+            self.polygon = Polygon(self.coords)
+            self.points_in = shapely.contains_xy(self.polygon, self.points[:, 0], self.points[:, 1])
+
+    def start_selection(self):
+        """Open the interactive figure and start the polygon selection.
+
+        The figure shows ``points`` together with the available key bindings and blocks
+        until the window is closed.
+        """
         # generate fig
         self.generate_fig()
 
@@ -49,13 +107,18 @@ class createROI:
         plt.show()
 
     def __call__(self, event):
+        """Handle a matplotlib mouse or keyboard event.
 
+        Parameters
+        ----------
+        event : matplotlib.backend_bases.MouseEvent or matplotlib.backend_bases.KeyEvent
+            ``button_press_event`` (left click adds a vertex) or ``key_press_event``
+            (space closes the polygon, ``c`` cancels it, ``q`` quits).
+        """
         # left click add vertices
         if event.name == "button_press_event" and event.button == 1:
             self.coords.append((event.xdata, event.ydata))
-            self.ax.scatter(
-                self.coords[-1][0], self.coords[-1][1], marker="o", c="blue", zorder=3
-            )
+            self.ax.scatter(self.coords[-1][0], self.coords[-1][1], marker="o", c="blue", zorder=3)
 
             self.fig.canvas.draw()
             self.fig.canvas.flush_events()
@@ -64,9 +127,7 @@ class createROI:
         elif event.name == "key_press_event" and event.key == " ":
             self.coords.append(self.coords[0])  # close polygon
             self.polygon = Polygon(self.coords)  # close polygon
-            self.points_in = self.polygon.contains(
-                [Point(x, y) for x, y in self.points]
-            )
+            self.points_in = shapely.contains_xy(self.polygon, self.points[:, 0], self.points[:, 1])
             self.ax.scatter(
                 self.points[self.points_in, 0],
                 self.points[self.points_in, 1],
@@ -76,9 +137,7 @@ class createROI:
                 c="red",
                 zorder=3,
             )
-            self.patch = plotting.patch_from_polygon(
-                self.polygon, color="gray", alpha=0.5
-            )
+            self.patch = plotting.patch_from_polygon(self.polygon, color="gray", alpha=0.5)
 
             self.ax.add_patch(self.patch)
             self.fig.canvas.draw()
@@ -125,6 +184,7 @@ class createROI:
             return
 
     def generate_fig(self):
+        """Create the figure and connect the mouse and keyboard event callbacks."""
         self.fig, self.ax = plt.subplots(layout="constrained")
         self.cid_MOUSE = self.ax.figure.canvas.mpl_connect("button_press_event", self)
         self.cid_KEYBOARD = self.ax.figure.canvas.mpl_connect("key_press_event", self)
@@ -133,12 +193,53 @@ class createROI:
 def compute_differential_reddening(
     df: pd.DataFrame,
     params: dict,
-    member_threshold=0.9,
-    calc_corr_threhsold=True,
-    roi=None,
-    plot=False,
-) -> pd.DataFrame:
+    member_threshold: float = 0.9,
+    calc_correction_threshold: bool = True,
+    roi: Optional[List[Tuple[float, float]] | Polygon] = None,
+    plot: bool = False,
+) -> Tuple[np.ndarray, np.ndarray, np.ndarray, Optional[Polygon]]:
+    """Compute the differential reddening correction for a cluster.
 
+    Parameters
+    ----------
+    df : DataFrame
+        DataFrame containing the photometric data. It must contain the columns named in
+        ``params`` plus ``membership`` (membership probability) and ``delta_ebv``
+        (initial differential reddening).
+    params : dict
+        Dictionary of parameters. Required keys: ``xcol`` and ``ycol`` (spatial coordinate
+        columns), ``band1`` and ``band2`` (magnitude columns), ``rband1`` and ``rband2``
+        (A(lambda)/A(V) extinction ratios of band1 and band2, multiplied internally by
+        R_V = 3.1 to obtain A(lambda)/E(B-V)),
+        ``TO_mag`` and ``TO_color`` (main-sequence turn-off magnitude and colour).
+        Optional keys: ``n_reference_stars`` (alias ``nref``, number of nearest reference
+        stars, default 50) and ``ord_step`` (bin size along the ordinate, default 0.1).
+    member_threshold : float, optional
+        Membership probability threshold to select reference stars. Default is 0.9.
+    calc_correction_threshold : bool, optional
+        If True, applies a 2-sigma threshold to the evaluated differential reddening. Default is True.
+    roi : list of tuples or Polygon, optional
+        Region of interest in the transformed CMD defining the main sequence. Default is None.
+        If None, triggers an interactive GUI selection (requires a display).
+    plot : bool, optional
+        If True, plots the fiducial line fit. Default is False.
+
+    Returns
+    -------
+    band1 : NDArray
+        Corrected magnitudes for band 1.
+    band2 : NDArray
+        Corrected magnitudes for band 2.
+    delta_E_B_V : NDArray
+        Evaluated differential reddening for each star [mag].
+    poli : shapely.Polygon or None
+        The selected region of interest (Polygon) used for defining MS reference stars.
+
+    Raises
+    ------
+    ValueError
+        If the region of interest contains no reference stars.
+    """
     # setup E(B-V)
     # exctintion laws
     rband1 = 3.1 * params["rband1"]
@@ -153,7 +254,7 @@ def compute_differential_reddening(
     turn_off_color = params["TO_color"]
 
     # closte neibourghs reference stars number used for correction
-    n_ref = params["nref"]
+    n_ref = params.get("n_reference_stars", params.get("nref", 50))
 
     # dataframe columns name
     # columns = params["columns"]  # columns name
@@ -190,64 +291,66 @@ def compute_differential_reddening(
     # A(lambda)/A(V) extinction coefficients for the two bands
     abscissa = color_obs_t * np.cos(theta) + band1_t * np.sin(theta)  # new X
     ordinate = -color_obs_t * np.sin(theta) + band1_t * np.cos(theta)  # new Y
-    abscissa_ref = color_obs_t_ref * np.cos(theta) + band1_t_ref * np.sin(
-        theta
-    )  # new X
-    ordinate_ref = -color_obs_t_ref * np.sin(theta) + band1_t_ref * np.cos(
-        theta
-    )  # new Y
+    abscissa_ref = color_obs_t_ref * np.cos(theta) + band1_t_ref * np.sin(theta)  # new X
+    ordinate_ref = -color_obs_t_ref * np.sin(theta) + band1_t_ref * np.cos(theta)  # new Y
 
     if roi is None:
         # spawn cmd widget to choose box
-        myROI = createROI(
-            np.vstack((abscissa_ref, ordinate_ref)).T
-        )  # need to be blocking until selection
-        while True:
-            if myROI.points_in is not None:
-                break
+        myROI = ROISelector(np.vstack((abscissa_ref, ordinate_ref)).T)
+        myROI.start_selection()  # blocks until selection window is closed
+        if myROI.points_in is None or myROI.polygon is None:
+            raise ValueError(
+                "No region of interest (ROI) polygon was selected before closing the window."
+            )
         poli = myROI.polygon
         filter = myROI.points_in
     else:
         poli = Polygon(roi) if not isinstance(roi, Polygon) else roi
-        filter = poli.contains(
-            [Point(x, y) for x, y in zip(abscissa_ref, ordinate_ref)]
-        )
+        filter = shapely.contains_xy(poli, abscissa_ref, ordinate_ref)
 
-    # _, ax = plt.subplots(layout="constrained")
-    # ax.scatter(abscissa, ordinate, marker=".", s=0.5, lw=0.1, zorder=2)
-    # plotting.plot_polygon(poli, ax=ax, color="gray", alpha=0.5, zorder=3)
-    # plt.show()
     # Define MS stars
     ms_ord = ordinate_ref[filter]
     ms_abs = abscissa_ref[filter]
     ms_x = x_ref[filter]
     ms_y = y_ref[filter]
-    ms_band1 = band1_ref[filter]
-    nMS = len(ms_band1)
+
+    if len(ms_ord) == 0:
+        raise ValueError(
+            "ROI filter selected 0 reference stars in rotated abscissa, ordinate space. "
+            "Ensure the ROI polygon overlaps with the rotated star coordinates."
+        )
 
     # here setup the iteration
-    ord_step = params["ord_step"] if "ord_step" in params else 0.1
-    ord_max = ms_ord.max()
-    ord_min = ms_ord.min()
-    n_step = (ord_max - ord_min) / ord_step
-    n_step = int(round(n_step))
+    ord_step = float(params["ord_step"]) if "ord_step" in params else 0.1
+    ord_max = float(ms_ord.max())
+    ord_min = float(ms_ord.min())
+    if ord_max <= ord_min:
+        bins = np.array([ord_min - 0.5 * ord_step, ord_min + 0.5 * ord_step])
+    else:
+        n_step = max(1, int(round((ord_max - ord_min) / ord_step)))
+        bins = np.linspace(ord_min, max(ord_max, ord_min + ord_step * n_step), n_step + 1)
 
     # Define fiducial line
-    # calcolo running median nella box e faccio fit sulle mediane
-    median_ord = np.zeros(n_step)
-    median_abs = np.zeros(n_step)
+    # calculate running median in the box and fit on the medians using binned_statistic
+    median_abs, _, _ = binned_statistic(ms_ord, ms_abs, statistic="median", bins=bins)
+    median_ord, _, _ = binned_statistic(ms_ord, ms_ord, statistic="median", bins=bins)
 
-    for k in range(n_step):
-        ord_bin = ms_ord[
-            (ms_ord > ord_min + ord_step * k) & (ms_ord < ord_min + ord_step * (k + 1))
-        ]
-        abs_bin = ms_abs[
-            (ms_ord > ord_min + ord_step * k) & (ms_ord < ord_min + ord_step * (k + 1))
-        ]
-        median_ord[k] = np.percentile(ord_bin, 50)
-        median_abs[k] = np.percentile(abs_bin, 50)
+    # Filter out empty bins (where binned_statistic returns NaN)
+    valid_bins = ~np.isnan(median_abs) & ~np.isnan(median_ord)
+    median_abs = median_abs[valid_bins]
+    median_ord = median_ord[valid_bins]
 
-    # faccio il fit
+    # Ensure strictly increasing points for CubicSpline
+    if len(median_ord) >= 2:
+        median_ord, unique_indices = np.unique(median_ord, return_index=True)
+        median_abs = median_abs[unique_indices]
+
+    if len(median_ord) < 2:
+        median_ord = np.array([ord_min - 0.1, ord_max + 0.1])
+        default_val = float(np.median(ms_abs)) if len(ms_abs) > 0 else 0.0
+        median_abs = np.array([default_val, default_val])
+
+    # Fit fiducial ridge line
     interp_ord = CubicSpline(median_ord, median_abs)
     fiducial_line_ord_all = interp_ord(ms_ord)
     # interp_abs = CubicSpline(median_abs, median_ord)
@@ -295,33 +398,41 @@ def compute_differential_reddening(
 
     ########## STEP 5: search for nearest neighbours ##############
     # define the set of reference coordinates (to build the tree) and the set of points (to look for k neighbours)
-    ref_coord = [[ms_x[k], ms_y[k]] for k in range(nMS)]
-    points = [[x[k], y[k]] for k in range(nstar)]
+    ref_coord = np.column_stack((ms_x, ms_y))
+    points = np.column_stack((x, y))
 
     # KDTree
-    tree = KDTree(ref_coord)
+    tree = cKDTree(ref_coord)
 
-    # number of reference stars
-    _, indices = tree.query(points, k=n_ref + 1)
+    # Cap k to the number of available reference stars
+    k_query = min(n_ref + 1, len(ref_coord))
+    _, indices = tree.query(points, k=k_query)
+    if k_query == 1:
+        indices = indices[:, None]
 
     ########## STEP 6: obtain median delta abscissa in the reference stars ##############
-    ref_fiducial_line_ord_all = fiducial_line_ord_all[
-        (ms_ord <= ord_max) & (ms_ord >= ord_min)
-    ]
+    ref_fiducial_line_ord_all = fiducial_line_ord_all[(ms_ord <= ord_max) & (ms_ord >= ord_min)]
 
     # compute delta abscissa
     delta_abscissa = ms_abs - ref_fiducial_line_ord_all
-    for k in range(nstar):
-        delta_abs_ref = delta_abscissa[indices[k, 1:]]
 
-        # sigma clip in the eference stars delta abscissa distrband2bution
-        delta_abs_ref_sigma_clip = delta_abs_ref[
-            (delta_abs_ref < np.median(delta_abs_ref) + 2 * np.std(delta_abs_ref))
-            & (delta_abs_ref > np.median(delta_abs_ref) - 2 * np.std(delta_abs_ref))
-        ]
+    # Pre-index delta_abs_all
+    neighbor_indices = indices[:, 1:] if k_query > 1 else indices
+    delta_abs_all = delta_abscissa[neighbor_indices]
 
-        # get median value
-        median_delta_abs[k] = np.percentile(delta_abs_ref_sigma_clip, 50)
+    # Implement efficient NumPy-vectorized sigma-clipping & median
+    medians = np.median(delta_abs_all, axis=1, keepdims=True)
+    stds = np.std(delta_abs_all, axis=1, keepdims=True)
+
+    # Create mask for valid elements (include boundary when std == 0)
+    mask = (delta_abs_all >= (medians - 2 * stds)) & (delta_abs_all <= (medians + 2 * stds))
+
+    # Use np.where to replace invalid elements with NaN, then compute nanmedian
+    clipped = np.where(mask, delta_abs_all, np.nan)
+
+    with warnings.catch_warnings():
+        warnings.simplefilter("ignore", category=RuntimeWarning)
+        median_delta_abs = np.nanmedian(clipped, axis=1)
 
     ########## STEP 8: compute new magnitudes ##############
     # abscissa = abscissa - median_delta_abs
@@ -335,13 +446,13 @@ def compute_differential_reddening(
     band2_eval = band1_eval - color_obs
 
     ########## STEP 9: evaluation of the differential reddening ##############
-    if calc_corr_threhsold:
+    if calc_correction_threshold:
         A_band1_star = band1_ini - band1_eval
         A_band2_star = band2_ini - band2_eval
         delta_e_v_band = A_band1_star - A_band2_star
-        delta_E_B_V = delta_e_v_band / ((rband1 - rband2))
+        delta_E_B_V = delta_e_v_band / (rband1 - rband2)
         corr_threshold = 2 * np.std(delta_E_B_V)
-        print(f"correction threshold at: {corr_threshold:.3f}")
+        logger.info(f"correction threshold at: {corr_threshold:.3f}")
         band1 = np.where(
             np.logical_and(np.abs(delta_E_B_V) > corr_threshold, delta_E_B_V_init != 0),
             band1_eval,
@@ -363,6 +474,6 @@ def compute_differential_reddening(
     A_band1_star = band1_ini - band1
     A_band2_star = band2_ini - band2
     delta_e_v_band = A_band1_star - A_band2_star
-    delta_E_B_V = delta_e_v_band / ((rband1 - rband2))
+    delta_E_B_V = delta_e_v_band / (rband1 - rband2)
 
     return band1, band2, delta_E_B_V, poli
